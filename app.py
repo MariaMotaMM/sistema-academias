@@ -27,7 +27,7 @@ st.set_page_config(page_title="Sistema de Verificação - Academias", layout="wi
 ID_PLANILHA_GOOGLE = "1JrUGFV8cwRR7niP3y95UMg8Q5nbj9adGjrkvnDzJon4"
 
 # ESTE É O ID DA SUA PASTA QUE VOCÊ ME MANDOU:
-ID_PASTA_FOTOS_DRIVE = "1DQwCGlv7DM-WOmw__WkpwbxVc7VhtcvK"
+ID_PASTA_FOTOS_DRIVE = "1ah-QzdyOS0uHjVaPgh6raJAMi6z9p1Ea"
 # =========================================================================
 
 # Lista de academias
