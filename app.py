@@ -24,7 +24,7 @@ st.set_page_config(page_title="Sistema de Verificação - Academias", layout="wi
 # CONFIGURAÇÕES OBRIGATÓRIAS DO GOOGLE
 # =========================================================================
 # APAGUE O TEXTO ABAIXO E COLE O ID DA SUA PLANILHA:
-ID_PLANILHA_GOOGLE = https://docs.google.com/spreadsheets/d/1JrUGFV8cwRR7niP3y95UMg8Q5nbj9adGjrkvnDzJon4/edit?usp=sharing
+ID_PLANILHA_GOOGLE = "1JrUGFV8cwRR7niP3y95UMg8Q5nbj9adGjrkvnDzJon4"
 
 # ESTE É O ID DA SUA PASTA QUE VOCÊ ME MANDOU:
 ID_PASTA_FOTOS_DRIVE = https://drive.google.com/drive/folders/1DQwCGlv7DM-WOmw__WkpwbxVc7VhtcvK?usp=drive_link
