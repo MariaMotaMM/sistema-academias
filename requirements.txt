@@ -1,0 +1,8 @@
+streamlit
+pandas
+plotly
+reportlab
+Pillow
+gspread
+google-auth
+google-api-python-client
