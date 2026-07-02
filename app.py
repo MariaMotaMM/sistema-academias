@@ -11,6 +11,10 @@ import plotly.express as px
 # Configuração da página
 st.set_page_config(page_title="Sistema de Verificação - Academias", layout="wide")
 
+# Inicializa o estado para mensagens de sucesso
+if "msg_sucesso" not in st.session_state:
+    st.session_state.msg_sucesso = None
+
 # ID da Planilha
 ID_PLANILHA_GOOGLE = "1JrUGFV8cwRR7niP3y95UMg8Q5nbj9adGjrkvnDzJon4"
 bairros = ['Feira X', 'Fraga Maia', 'Muchila', 'Vila Olimpia', 'Artemia', 'Sobradinho', 'Noide', 'Cidade Nova', 'Adenil', 'Presidente', 'Jardim Europa']
@@ -41,6 +45,11 @@ def obter_dados_sheet():
         df["_idx"] = df.index + 2 
     return df
 
+# Exibe mensagem de sucesso se houver algo no estado
+if st.session_state.msg_sucesso:
+    st.success(st.session_state.msg_sucesso)
+    st.session_state.msg_sucesso = None
+
 # --- ESTRUTURA DAS ABAS ---
 st.title("🏋️‍♂️ Verificação de Academias")
 aba_registrar, aba_visualizar, aba_modificar, aba_prints, aba_dash = st.tabs([
@@ -60,25 +69,20 @@ with aba_registrar:
         if st.form_submit_button("Salvar"):
             fotos_b64 = [foto_para_base64(f) for f in fotos]
             sheet.append_row([obter_data_hoje(), acad, erro, desc, sol, "|".join(fotos_b64)])
-            st.success("Salvo com sucesso!")
+            st.session_state.msg_sucesso = "Salvo com sucesso!"
             st.rerun()
 
 with aba_visualizar:
     st.subheader("🔍 Filtros de Pesquisa")
     df = obter_dados_sheet()
-    
     if not df.empty:
         c1, c2 = st.columns(2)
-        # Filtros conforme solicitado
         filtro_acad = c1.selectbox("Filtrar por Academia:", ["Todas"] + list(df["Academia"].unique()))
         filtro_data = c2.selectbox("Filtrar por Data:", ["Todas"] + list(df["Data"].unique()))
-        
         df_f = df.copy()
         if filtro_acad != "Todas": df_f = df_f[df_f["Academia"] == filtro_acad]
         if filtro_data != "Todas": df_f = df_f[df_f["Data"] == filtro_data]
-        
         st.divider()
-        
         if not df_f.empty:
             for data in sorted(df_f["Data"].unique(), reverse=True):
                 st.header(f"📅 {data}")
@@ -102,47 +106,34 @@ with aba_modificar:
             e_s = st.text_area("Solução", value=d['Solucao'])
             if st.form_submit_button("Atualizar"):
                 sheet.update(f"A{idx}:E{idx}", [[obter_data_hoje(), e_a, e_e, e_d, e_s]])
+                st.session_state.msg_sucesso = "Atualizado com sucesso!"
                 st.rerun()
             if st.form_submit_button("🚨 Excluir"):
                 sheet.delete_rows(idx)
+                st.session_state.msg_sucesso = "Excluído com sucesso!"
                 st.rerun()
 
 with aba_prints:
     st.subheader("🖼️ Filtros para Visualizar Prints")
     df = obter_dados_sheet()
-    
-    # 1. Verifica se o DataFrame não está vazio e se a coluna 'Fotos' existe nele
     if not df.empty and "Fotos" in df.columns:
-        df_fotos = df[df["Fotos"] != ""] # Filtra apenas registros com fotos
-        
+        df_fotos = df[df["Fotos"] != ""]
         if not df_fotos.empty:
-            # Criar os mesmos filtros da aba visualizar
             col1, col2 = st.columns(2)
             filtro_acad = col1.selectbox("Filtrar Academia (Prints):", ["Todas"] + list(df_fotos["Academia"].unique()), key="f_acad_prints")
             filtro_data = col2.selectbox("Filtrar Data (Prints):", ["Todas"] + list(df_fotos["Data"].unique()), key="f_data_prints")
-            
-            # Aplicar filtros
             df_f = df_fotos.copy()
             if filtro_acad != "Todas": df_f = df_f[df_f["Academia"] == filtro_acad]
             if filtro_data != "Todas": df_f = df_f[df_f["Data"] == filtro_data]
-            
             st.divider()
-            
             if not df_f.empty:
-                # Dropdown para selecionar o registro filtrado
                 opcoes_registros = df_f["Data"] + " - " + df_f["Academia"] + " (ID:" + df_f["_idx"].astype(str) + ")"
                 reg_selecionado = st.selectbox("Selecione o registro para ver as fotos:", opcoes_registros)
-                
-                # Extrair o ID do registro selecionado
-                idx_selecionado = int(reg_selecionado.split("(ID:")[1].replace(")", ""))
-                
-                # Exibir as fotos
-                fotos_str = df_f.loc[df_f["_idx"] == idx_selecionado, "Fotos"].values[0]
+                idx_sel = int(reg_selecionado.split("(ID:")[1].replace(")", ""))
+                fotos_str = df_f.loc[df_f["_idx"] == idx_sel, "Fotos"].values[0]
                 if fotos_str:
                     for b64 in fotos_str.split("|"):
                         st.image(base64.b64decode(b64))
-            else:
-                st.warning("Nenhum print encontrado com esses filtros.")
         else:
             st.info("Nenhum registro com fotos foi encontrado.")
     else:
@@ -151,34 +142,19 @@ with aba_prints:
 with aba_dash:
     st.subheader("📈 Análise de Dados das Academias")
     df = obter_dados_sheet()
-    
     if not df.empty:
         col_grafico1, col_grafico2 = st.columns(2)
-        
-        # 1. Gráfico de Pizza (Participação Geral)
         with col_grafico1:
             st.markdown("### 📊 Participação (%) por Academia")
             fig_pizza = px.pie(df, names='Academia', hole=0.4)
             st.plotly_chart(fig_pizza, use_container_width=True)
-            
-        # 2. Gráfico de Barras (Erros)
         with col_grafico2:
             st.markdown("### 🚨 Academias com Mais Erros")
             df_erros = df[df['Teve Erro?'] == 'Sim']
-            
             if not df_erros.empty:
-                # Conta quantas vezes cada academia aparece na lista de erros
                 contagem_erros = df_erros['Academia'].value_counts().reset_index()
                 contagem_erros.columns = ['Academia', 'Total de Erros']
-                
-                fig_barras = px.bar(
-                    contagem_erros, 
-                    x='Academia', 
-                    y='Total de Erros',
-                    color='Total de Erros',
-                    color_continuous_scale='Reds',
-                    text_auto=True
-                )
+                fig_barras = px.bar(contagem_erros, x='Academia', y='Total de Erros', color='Total de Erros', color_continuous_scale='Reds', text_auto=True)
                 st.plotly_chart(fig_barras, use_container_width=True)
             else:
                 st.info("🎉 Parabéns! Nenhum erro foi registrado até o momento.")
