@@ -167,6 +167,7 @@ with aba_dash:
     df = obter_dados_sheet()
     
     if not df.empty and "Academia" in df.columns:
+        # Layout em duas colunas para os gráficos principais
         col_grafico1, col_grafico2 = st.columns(2)
         
         # 1. Gráfico de Pizza
@@ -175,15 +176,14 @@ with aba_dash:
             fig_pizza = px.pie(df, names='Academia', hole=0.4)
             st.plotly_chart(fig_pizza, use_container_width=True)
             
-        # 2. Gráfico de Barras
+        # 2. Gráfico de Barras (Mais Erros)
         with col_grafico2:
             st.markdown("### 🚨 Academias com Mais Erros")
             df_erros = df[df['Teve Erro?'] == 'Sim']
             
             if not df_erros.empty:
-                # Geramos o dataframe de contagem de forma explícita para evitar erros de versão
                 contagem = df_erros['Academia'].value_counts().reset_index()
-                contagem.columns = ['Academia', 'Total_Erros'] # Renomeamos para garantir clareza
+                contagem.columns = ['Academia', 'Total_Erros']
                 
                 fig_barras = px.bar(
                     contagem, 
@@ -195,6 +195,28 @@ with aba_dash:
                 )
                 st.plotly_chart(fig_barras, use_container_width=True)
             else:
-                st.info("🎉 Parabéns! Nenhum erro foi registrado até o momento.")
+                st.info("🎉 Parabéns! Nenhum erro registrado.")
+
+        # 3. Gráfico de Menor Participação (Ocupa a largura total)
+        st.divider()
+        st.markdown("### 📉 Academias com Menor Participação")
+        
+        contagem_geral = df['Academia'].value_counts().reset_index()
+        contagem_geral.columns = ['Academia', 'Total_Registros']
+        
+        # Ordena de forma crescente (as menores participações primeiro)
+        contagem_menor = contagem_geral.sort_values(by='Total_Registros', ascending=True)
+        
+        fig_menor = px.bar(
+            contagem_menor, 
+            x='Total_Registros', 
+            y='Academia',
+            orientation='h',
+            color='Total_Registros',
+            color_continuous_scale='Blues_r',
+            text_auto=True
+        )
+        st.plotly_chart(fig_menor, use_container_width=True)
+        
     else:
         st.info("O sistema ainda não possui dados suficientes para gerar os gráficos.")
