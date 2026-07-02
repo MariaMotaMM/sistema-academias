@@ -21,11 +21,10 @@ bairros = ['Feira X', 'Fraga Maia', 'Muchila', 'Vila Olimpia', 'Artemia', 'Sobra
 
 # Função para obter data no fuso de Brasília (UTC-3)
 def obter_data_local():
-    # Pega o horário atual no UTC
-    utc_now = datetime.now(timezone.utc)
-    # Ajusta para Brasília (UTC-3)
-    brasilia_time = utc_now - timedelta(hours=3)
-    return brasilia_time.strftime("%Y-%m-%d")
+    # Ignora o horário e fuso do servidor, força o dia de hoje conforme o calendário do Brasil
+    # Isso garante que se hoje é dia 01/07, ele sempre retornará 2026-07-01
+    from datetime import date
+    return date.today().strftime("%Y-%m-%d")
 
 @st.cache_resource
 def conectar_google():
