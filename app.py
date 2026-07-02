@@ -100,37 +100,46 @@ with aba_visualizar:
 with aba_modificar:
     st.subheader("✏️ Filtrar para Modificar")
     df = obter_dados_sheet()
-    if not df.empty:
-        c1, c2 = st.columns(2)
-        filtro_acad = c1.selectbox("Filtrar Academia:", ["Todas"] + list(df["Academia"].unique()), key="m_acad")
-        filtro_data = c2.selectbox("Filtrar Data:", ["Todas"] + list(df["Data"].unique()), key="m_data")
+    
+    # 1. Filtros
+    c1, c2 = st.columns(2)
+    filtro_acad = c1.selectbox("Filtrar Academia:", ["Todas"] + list(df["Academia"].unique()), key="m_acad")
+    filtro_data = c2.selectbox("Filtrar Data:", ["Todas"] + list(df["Data"].unique()), key="m_data")
+    
+    df_f = df.copy()
+    if filtro_acad != "Todas": df_f = df_f[df_f["Academia"] == filtro_acad]
+    if filtro_data != "Todas": df_f = df_f[df_f["Data"] == filtro_data]
+    
+    if not df_f.empty:
+        # 2. Seleção do registro
+        opcoes = df_f.apply(lambda x: f"{x['Data']} - {x['Academia']} (ID:{x['_idx']})", axis=1)
+        selecao = st.selectbox("Selecione o registro para editar/excluir:", opcoes, key="selecao_modificar")
         
-        df_f = df.copy()
-        if filtro_acad != "Todas": df_f = df_f[df_f["Academia"] == filtro_acad]
-        if filtro_data != "Todas": df_f = df_f[df_f["Data"] == filtro_data]
+        # Extrai o ID
+        idx = int(selecao.split("(ID:")[1].replace(")", ""))
+        d = df.loc[df["_idx"] == idx].iloc[0]
         
-        if not df_f.empty:
-            opcoes = df_f.apply(lambda x: f"{x['Data']} - {x['Academia']} (ID:{x['_idx']})", axis=1)
-            selecao = st.selectbox("Selecione o registro para editar/excluir:", opcoes)
-            idx = int(selecao.split("(ID:")[1].replace(")", ""))
-            d = df.loc[df["_idx"] == idx].iloc[0]
+        # 3. Formulário de Edição
+        with st.form("edit_form"):
+            e_a = st.selectbox("Academia", bairros, index=bairros.index(d['Academia']))
+            e_e = st.radio("Erro?", ["Não", "Sim"], index=0 if d['Teve Erro?']=="Não" else 1)
+            e_d = st.text_area("Descrição", value=d['Descricao Erro'])
+            e_s = st.text_area("Solução", value=d['Solucao'])
             
-            with st.form("edit"):
-                e_a = st.selectbox("Academia", bairros, index=bairros.index(d['Academia']))
-                e_e = st.radio("Erro?", ["Não", "Sim"], index=0 if d['Teve Erro?']=="Não" else 1)
-                e_d = st.text_area("Descrição", value=d['Descricao Erro'])
-                e_s = st.text_area("Solução", value=d['Solucao'])
-                c_btn1, c_btn2 = st.columns(2)
-                if c_btn1.form_submit_button("Atualizar"):
-                    sheet.update(f"A{idx}:E{idx}", [[obter_data_hoje(), e_a, e_e, e_d, e_s]])
-                    st.session_state.msg_sucesso = "✅ Atualizado com sucesso!"
-                    st.rerun()
-                if c_btn2.form_submit_button("🚨 Excluir"):
-                    sheet.delete_rows(idx)
-                    st.session_state.msg_sucesso = "🗑️ Excluído com sucesso!"
-                    st.rerun()
-        else:
-            st.warning("Nenhum registro encontrado com esses filtros.")
+            c_btn1, c_btn2 = st.columns(2)
+            
+            # Ao clicar em atualizar, o código salva no Google, define a mensagem e recarrega
+            if c_btn1.form_submit_button("Atualizar"):
+                sheet.update(f"A{idx}:E{idx}", [[obter_data_hoje(), e_a, e_e, e_d, e_s]])
+                st.session_state.msg_sucesso = "✅ Atualizado com sucesso!"
+                st.rerun()
+                
+            if c_btn2.form_submit_button("🚨 Excluir"):
+                sheet.delete_rows(idx)
+                st.session_state.msg_sucesso = "🗑️ Excluído com sucesso!"
+                st.rerun()
+    else:
+        st.warning("Nenhum registro encontrado com esses filtros.")
 
 with aba_prints:
     st.subheader("🖼️ Filtros para Visualizar Prints")
