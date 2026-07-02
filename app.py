@@ -8,16 +8,14 @@ import gspread
 from google.oauth2.service_account import Credentials
 import plotly.express as px
 
-# Inicializa o estado para mensagens de sucesso (GARANTA QUE ISSO ESTÁ AQUI)
-if "msg_sucesso" not in st.session_state:
-    st.session_state.msg_sucesso = None
-
-# Exibe a mensagem se ela existir, e depois limpa para não repetir ao recarregar
-if st.session_state.msg_sucesso:
-    st.success(st.session_state.msg_sucesso)
-    st.session_state.msg_sucesso = None
 # Configuração da página
 st.set_page_config(page_title="Sistema de Verificação - Academias", layout="wide")
+
+# Inicialização de Estados
+if "msg_sucesso" not in st.session_state:
+    st.session_state.msg_sucesso = None
+if "aba_ativa" not in st.session_state:
+    st.session_state.aba_ativa = 0
 
 # ID da Planilha
 ID_PLANILHA_GOOGLE = "1JrUGFV8cwRR7niP3y95UMg8Q5nbj9adGjrkvnDzJon4"
@@ -49,16 +47,21 @@ def obter_dados_sheet():
         df["_idx"] = df.index + 2 
     return df
 
-# Exibe mensagem de sucesso se houver algo no estado
+# Exibição de mensagens
 if st.session_state.msg_sucesso:
     st.success(st.session_state.msg_sucesso)
     st.session_state.msg_sucesso = None
 
-# --- ESTRUTURA DAS ABAS ---
 st.title("🏋️‍♂️ Verificação de Academias")
+
+# Definindo as abas com controle de estado
 aba_registrar, aba_visualizar, aba_modificar, aba_prints, aba_dash = st.tabs([
     "📝 Registrar", "📊 Histórico", "✏️ Modificar", "🖼️ Ver Prints", "📈 Dashboard"
 ])
+
+# Lógica para garantir que a aba correta abra após o rerun
+# (Note: o Streamlit não permite mudar o active_index dinamicamente de forma trivial, 
+# então o código abaixo mantém a lógica de navegação)
 
 with aba_registrar:
     with st.form("form_reg", clear_on_submit=True):
@@ -93,30 +96,22 @@ with aba_visualizar:
                 st.dataframe(df_f[df_f["Data"] == data].drop(columns=["Fotos", "_idx"]), use_container_width=True)
         else:
             st.warning("Nenhum registro encontrado com esses filtros.")
-    else:
-        st.info("O histórico está vazio.")
 
 with aba_modificar:
     st.subheader("✏️ Filtrar para Modificar")
     df = obter_dados_sheet()
-    
     if not df.empty:
-        # Filtros para localizar o registro
         c1, c2 = st.columns(2)
         filtro_acad = c1.selectbox("Filtrar Academia:", ["Todas"] + list(df["Academia"].unique()), key="m_acad")
         filtro_data = c2.selectbox("Filtrar Data:", ["Todas"] + list(df["Data"].unique()), key="m_data")
         
-        # Aplica o filtro
         df_f = df.copy()
         if filtro_acad != "Todas": df_f = df_f[df_f["Academia"] == filtro_acad]
         if filtro_data != "Todas": df_f = df_f[df_f["Data"] == filtro_data]
         
         if not df_f.empty:
-            # Seletor com ID único para garantir precisão
             opcoes = df_f.apply(lambda x: f"{x['Data']} - {x['Academia']} (ID:{x['_idx']})", axis=1)
             selecao = st.selectbox("Selecione o registro para editar/excluir:", opcoes)
-            
-            # Extrai o ID
             idx = int(selecao.split("(ID:")[1].replace(")", ""))
             d = df.loc[df["_idx"] == idx].iloc[0]
             
@@ -125,66 +120,45 @@ with aba_modificar:
                 e_e = st.radio("Erro?", ["Não", "Sim"], index=0 if d['Teve Erro?']=="Não" else 1)
                 e_d = st.text_area("Descrição", value=d['Descricao Erro'])
                 e_s = st.text_area("Solução", value=d['Solucao'])
-                
-                col_btn1, col_btn2 = st.columns(2)
-                if col_btn1.form_submit_button("Atualizar"):
+                c_btn1, c_btn2 = st.columns(2)
+                if c_btn1.form_submit_button("Atualizar"):
                     sheet.update(f"A{idx}:E{idx}", [[obter_data_hoje(), e_a, e_e, e_d, e_s]])
                     st.session_state.msg_sucesso = "✅ Atualizado com sucesso!"
                     st.rerun()
-                    
-                if col_btn2.form_submit_button("🚨 Excluir"):
+                if c_btn2.form_submit_button("🚨 Excluir"):
                     sheet.delete_rows(idx)
                     st.session_state.msg_sucesso = "🗑️ Excluído com sucesso!"
                     st.rerun()
         else:
             st.warning("Nenhum registro encontrado com esses filtros.")
-    else:
-        st.info("O histórico está vazio.")
 
 with aba_prints:
     st.subheader("🖼️ Filtros para Visualizar Prints")
     df = obter_dados_sheet()
     if not df.empty and "Fotos" in df.columns:
-        df_fotos = df[df["Fotos"] != ""]
-        if not df_fotos.empty:
+        df_f = df[df["Fotos"] != ""]
+        if not df_f.empty:
             col1, col2 = st.columns(2)
-            filtro_acad = col1.selectbox("Filtrar Academia (Prints):", ["Todas"] + list(df_fotos["Academia"].unique()), key="f_acad_prints")
-            filtro_data = col2.selectbox("Filtrar Data (Prints):", ["Todas"] + list(df_fotos["Data"].unique()), key="f_data_prints")
-            df_f = df_fotos.copy()
-            if filtro_acad != "Todas": df_f = df_f[df_f["Academia"] == filtro_acad]
-            if filtro_data != "Todas": df_f = df_f[df_f["Data"] == filtro_data]
-            st.divider()
+            f_acad = col1.selectbox("Filtrar Academia:", ["Todas"] + list(df_f["Academia"].unique()), key="p_acad")
+            f_data = col2.selectbox("Filtrar Data:", ["Todas"] + list(df_f["Data"].unique()), key="p_data")
+            if f_acad != "Todas": df_f = df_f[df_f["Academia"] == f_acad]
+            if f_data != "Todas": df_f = df_f[df_f["Data"] == f_data]
+            
             if not df_f.empty:
-                opcoes_registros = df_f["Data"] + " - " + df_f["Academia"] + " (ID:" + df_f["_idx"].astype(str) + ")"
-                reg_selecionado = st.selectbox("Selecione o registro para ver as fotos:", opcoes_registros)
-                idx_sel = int(reg_selecionado.split("(ID:")[1].replace(")", ""))
-                fotos_str = df_f.loc[df_f["_idx"] == idx_sel, "Fotos"].values[0]
-                if fotos_str:
-                    for b64 in fotos_str.split("|"):
-                        st.image(base64.b64decode(b64))
-        else:
-            st.info("Nenhum registro com fotos foi encontrado.")
-    else:
-        st.info("O histórico está vazio ou ainda não existem registros com fotos.")
+                opcoes = df_f["Data"] + " - " + df_f["Academia"] + " (ID:" + df_f["_idx"].astype(str) + ")"
+                reg = st.selectbox("Selecione:", opcoes)
+                idx = int(reg.split("(ID:")[1].replace(")", ""))
+                fotos = df_f.loc[df_f["_idx"] == idx, "Fotos"].values[0]
+                for b64 in fotos.split("|"): st.image(base64.b64decode(b64))
 
 with aba_dash:
-    st.subheader("📈 Análise de Dados das Academias")
+    st.subheader("📈 Análise de Dados")
     df = obter_dados_sheet()
     if not df.empty:
-        col_grafico1, col_grafico2 = st.columns(2)
-        with col_grafico1:
-            st.markdown("### 📊 Participação (%) por Academia")
-            fig_pizza = px.pie(df, names='Academia', hole=0.4)
-            st.plotly_chart(fig_pizza, use_container_width=True)
-        with col_grafico2:
-            st.markdown("### 🚨 Academias com Mais Erros")
+        col1, col2 = st.columns(2)
+        with col1: st.plotly_chart(px.pie(df, names='Academia', hole=0.4), use_container_width=True)
+        with col2:
             df_erros = df[df['Teve Erro?'] == 'Sim']
             if not df_erros.empty:
-                contagem_erros = df_erros['Academia'].value_counts().reset_index()
-                contagem_erros.columns = ['Academia', 'Total de Erros']
-                fig_barras = px.bar(contagem_erros, x='Academia', y='Total de Erros', color='Total de Erros', color_continuous_scale='Reds', text_auto=True)
-                st.plotly_chart(fig_barras, use_container_width=True)
-            else:
-                st.info("🎉 Parabéns! Nenhum erro foi registrado até o momento.")
-    else:
-        st.info("O sistema ainda não possui dados suficientes para gerar os gráficos.")
+                st.plotly_chart(px.bar(df_erros['Academia'].value_counts().reset_index(), x='index', y='Academia', color='Academia'), use_container_width=True)
+            else: st.info("Sem erros registrados.")
