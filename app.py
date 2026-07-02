@@ -7,10 +7,6 @@ import base64
 import gspread
 from google.oauth2.service_account import Credentials
 import plotly.express as px
-from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
 
 # Configuração da página
 st.set_page_config(page_title="Sistema de Verificação - Academias", layout="wide")
@@ -45,28 +41,6 @@ def obter_dados_sheet():
         df["_idx"] = df.index + 2 
     return df
 
-def gerar_pdf(df_dados):
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4)
-    story = []
-    styles = getSampleStyleSheet()
-    story.append(Paragraph("Relatório de Verificação", styles['Title']))
-    
-    table_data = [["Data", "Academia", "Erro", "Desc", "Sol", "Foto"]]
-    for _, row in df_dados.iterrows():
-        foto_celula = "-"
-        if row['Fotos']:
-            try:
-                b64 = row['Fotos'].split("|")[0]
-                foto_celula = RLImage(io.BytesIO(base64.b64decode(b64)), width=50, height=30)
-            except: pass
-        table_data.append([row['Data'], row['Academia'], row['Teve Erro?'], row['Descricao Erro'], row['Solucao'], foto_celula])
-    
-    story.append(Table(table_data, colWidths=[60, 80, 40, 120, 120, 50]))
-    doc.build(story)
-    buffer.seek(0)
-    return buffer
-
 # --- ESTRUTURA DAS ABAS ---
 st.title("🏋️‍♂️ Verificação de Academias")
 aba_registrar, aba_visualizar, aba_modificar, aba_prints, aba_dash = st.tabs([
@@ -90,14 +64,29 @@ with aba_registrar:
             st.rerun()
 
 with aba_visualizar:
+    st.subheader("🔍 Filtros de Pesquisa")
     df = obter_dados_sheet()
+    
     if not df.empty:
+        c1, c2 = st.columns(2)
+        # Filtros conforme solicitado
+        filtro_acad = c1.selectbox("Filtrar por Academia:", ["Todas"] + list(df["Academia"].unique()))
+        filtro_data = c2.selectbox("Filtrar por Data:", ["Todas"] + list(df["Data"].unique()))
+        
         df_f = df.copy()
-        if st.download_button("📥 Baixar PDF", data=gerar_pdf(df_f), file_name="relatorio.pdf", mime="application/pdf"):
-            st.write("Gerando...")
-        for data in sorted(df_f["Data"].unique(), reverse=True):
-            st.header(f"📅 {data}")
-            st.dataframe(df_f[df_f["Data"] == data].drop(columns=["Fotos", "_idx"]), use_container_width=True)
+        if filtro_acad != "Todas": df_f = df_f[df_f["Academia"] == filtro_acad]
+        if filtro_data != "Todas": df_f = df_f[df_f["Data"] == filtro_data]
+        
+        st.divider()
+        
+        if not df_f.empty:
+            for data in sorted(df_f["Data"].unique(), reverse=True):
+                st.header(f"📅 {data}")
+                st.dataframe(df_f[df_f["Data"] == data].drop(columns=["Fotos", "_idx"]), use_container_width=True)
+        else:
+            st.warning("Nenhum registro encontrado com esses filtros.")
+    else:
+        st.info("O histórico está vazio.")
 
 with aba_modificar:
     df = obter_dados_sheet()
