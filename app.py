@@ -8,12 +8,16 @@ import gspread
 from google.oauth2.service_account import Credentials
 import plotly.express as px
 
-# Configuração da página
-st.set_page_config(page_title="Sistema de Verificação - Academias", layout="wide")
-
-# Inicializa o estado para mensagens de sucesso
+# Inicializa o estado para mensagens de sucesso (GARANTA QUE ISSO ESTÁ AQUI)
 if "msg_sucesso" not in st.session_state:
     st.session_state.msg_sucesso = None
+
+# Exibe a mensagem se ela existir, e depois limpa para não repetir ao recarregar
+if st.session_state.msg_sucesso:
+    st.success(st.session_state.msg_sucesso)
+    st.session_state.msg_sucesso = None
+# Configuração da página
+st.set_page_config(page_title="Sistema de Verificação - Academias", layout="wide")
 
 # ID da Planilha
 ID_PLANILHA_GOOGLE = "1JrUGFV8cwRR7niP3y95UMg8Q5nbj9adGjrkvnDzJon4"
@@ -97,22 +101,22 @@ with aba_modificar:
     df = obter_dados_sheet()
     
     if not df.empty:
-        # 1. Filtros para localizar o registro
+        # Filtros para localizar o registro
         c1, c2 = st.columns(2)
         filtro_acad = c1.selectbox("Filtrar Academia:", ["Todas"] + list(df["Academia"].unique()), key="m_acad")
         filtro_data = c2.selectbox("Filtrar Data:", ["Todas"] + list(df["Data"].unique()), key="m_data")
         
-        # 2. Aplica o filtro
+        # Aplica o filtro
         df_f = df.copy()
         if filtro_acad != "Todas": df_f = df_f[df_f["Academia"] == filtro_acad]
         if filtro_data != "Todas": df_f = df_f[df_f["Data"] == filtro_data]
         
         if not df_f.empty:
-            # 3. Seletor de registros baseados no filtro
+            # Seletor com ID único para garantir precisão
             opcoes = df_f.apply(lambda x: f"{x['Data']} - {x['Academia']} (ID:{x['_idx']})", axis=1)
             selecao = st.selectbox("Selecione o registro para editar/excluir:", opcoes)
             
-            # Extrai o ID do registro selecionado
+            # Extrai o ID
             idx = int(selecao.split("(ID:")[1].replace(")", ""))
             d = df.loc[df["_idx"] == idx].iloc[0]
             
@@ -122,14 +126,15 @@ with aba_modificar:
                 e_d = st.text_area("Descrição", value=d['Descricao Erro'])
                 e_s = st.text_area("Solução", value=d['Solucao'])
                 
-                if st.form_submit_button("Atualizar"):
+                col_btn1, col_btn2 = st.columns(2)
+                if col_btn1.form_submit_button("Atualizar"):
                     sheet.update(f"A{idx}:E{idx}", [[obter_data_hoje(), e_a, e_e, e_d, e_s]])
-                    st.session_state.msg_sucesso = "Atualizado com sucesso!"
+                    st.session_state.msg_sucesso = "✅ Atualizado com sucesso!"
                     st.rerun()
                     
-                if st.form_submit_button("🚨 Excluir"):
+                if col_btn2.form_submit_button("🚨 Excluir"):
                     sheet.delete_rows(idx)
-                    st.session_state.msg_sucesso = "Excluído com sucesso!"
+                    st.session_state.msg_sucesso = "🗑️ Excluído com sucesso!"
                     st.rerun()
         else:
             st.warning("Nenhum registro encontrado com esses filtros.")
