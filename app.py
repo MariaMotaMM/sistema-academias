@@ -108,12 +108,40 @@ with aba_modificar:
                 st.rerun()
 
 with aba_prints:
+    st.subheader("🖼️ Filtros para Visualizar Prints")
     df = obter_dados_sheet()
-    df_f = df[df["Fotos"] != ""]
-    if not df_f.empty:
-        reg = st.selectbox("Registro:", df_f["Data"] + " - " + df_f["Academia"])
-        for b64 in df_f.loc[df_f["Data"] + " - " + df_f["Academia"] == reg, "Fotos"].values[0].split("|"):
-            st.image(base64.b64decode(b64))
+    df_fotos = df[df["Fotos"] != ""] # Filtra apenas registros com fotos
+    
+    if not df_fotos.empty:
+        # Criar os mesmos filtros da aba visualizar
+        col1, col2 = st.columns(2)
+        filtro_acad = col1.selectbox("Filtrar Academia (Prints):", ["Todas"] + list(df_fotos["Academia"].unique()), key="f_acad_prints")
+        filtro_data = col2.selectbox("Filtrar Data (Prints):", ["Todas"] + list(df_fotos["Data"].unique()), key="f_data_prints")
+        
+        # Aplicar filtros
+        df_f = df_fotos.copy()
+        if filtro_acad != "Todas": df_f = df_f[df_f["Academia"] == filtro_acad]
+        if filtro_data != "Todas": df_f = df_f[df_f["Data"] == filtro_data]
+        
+        st.divider()
+        
+        if not df_f.empty:
+            # Dropdown para selecionar o registro filtrado
+            opcoes_registros = df_f["Data"] + " - " + df_f["Academia"] + " (ID:" + df_f["_idx"].astype(str) + ")"
+            reg_selecionado = st.selectbox("Selecione o registro para ver as fotos:", opcoes_registros)
+            
+            # Extrair o ID do registro selecionado para garantir precisão
+            idx_selecionado = int(reg_selecionado.split("(ID:")[1].replace(")", ""))
+            
+            # Exibir as fotos
+            fotos_str = df_f.loc[df_f["_idx"] == idx_selecionado, "Fotos"].values[0]
+            if fotos_str:
+                for b64 in fotos_str.split("|"):
+                    st.image(base64.b64decode(b64))
+        else:
+            st.warning("Nenhum print encontrado com esses filtros.")
+    else:
+        st.info("Nenhum registro com fotos foi encontrado.")
 
 with aba_dash:
     st.subheader("📈 Análise de Dados das Academias")
