@@ -110,38 +110,43 @@ with aba_modificar:
 with aba_prints:
     st.subheader("🖼️ Filtros para Visualizar Prints")
     df = obter_dados_sheet()
-    df_fotos = df[df["Fotos"] != ""] # Filtra apenas registros com fotos
     
-    if not df_fotos.empty:
-        # Criar os mesmos filtros da aba visualizar
-        col1, col2 = st.columns(2)
-        filtro_acad = col1.selectbox("Filtrar Academia (Prints):", ["Todas"] + list(df_fotos["Academia"].unique()), key="f_acad_prints")
-        filtro_data = col2.selectbox("Filtrar Data (Prints):", ["Todas"] + list(df_fotos["Data"].unique()), key="f_data_prints")
+    # 1. Verifica se o DataFrame não está vazio e se a coluna 'Fotos' existe nele
+    if not df.empty and "Fotos" in df.columns:
+        df_fotos = df[df["Fotos"] != ""] # Filtra apenas registros com fotos
         
-        # Aplicar filtros
-        df_f = df_fotos.copy()
-        if filtro_acad != "Todas": df_f = df_f[df_f["Academia"] == filtro_acad]
-        if filtro_data != "Todas": df_f = df_f[df_f["Data"] == filtro_data]
-        
-        st.divider()
-        
-        if not df_f.empty:
-            # Dropdown para selecionar o registro filtrado
-            opcoes_registros = df_f["Data"] + " - " + df_f["Academia"] + " (ID:" + df_f["_idx"].astype(str) + ")"
-            reg_selecionado = st.selectbox("Selecione o registro para ver as fotos:", opcoes_registros)
+        if not df_fotos.empty:
+            # Criar os mesmos filtros da aba visualizar
+            col1, col2 = st.columns(2)
+            filtro_acad = col1.selectbox("Filtrar Academia (Prints):", ["Todas"] + list(df_fotos["Academia"].unique()), key="f_acad_prints")
+            filtro_data = col2.selectbox("Filtrar Data (Prints):", ["Todas"] + list(df_fotos["Data"].unique()), key="f_data_prints")
             
-            # Extrair o ID do registro selecionado para garantir precisão
-            idx_selecionado = int(reg_selecionado.split("(ID:")[1].replace(")", ""))
+            # Aplicar filtros
+            df_f = df_fotos.copy()
+            if filtro_acad != "Todas": df_f = df_f[df_f["Academia"] == filtro_acad]
+            if filtro_data != "Todas": df_f = df_f[df_f["Data"] == filtro_data]
             
-            # Exibir as fotos
-            fotos_str = df_f.loc[df_f["_idx"] == idx_selecionado, "Fotos"].values[0]
-            if fotos_str:
-                for b64 in fotos_str.split("|"):
-                    st.image(base64.b64decode(b64))
+            st.divider()
+            
+            if not df_f.empty:
+                # Dropdown para selecionar o registro filtrado
+                opcoes_registros = df_f["Data"] + " - " + df_f["Academia"] + " (ID:" + df_f["_idx"].astype(str) + ")"
+                reg_selecionado = st.selectbox("Selecione o registro para ver as fotos:", opcoes_registros)
+                
+                # Extrair o ID do registro selecionado
+                idx_selecionado = int(reg_selecionado.split("(ID:")[1].replace(")", ""))
+                
+                # Exibir as fotos
+                fotos_str = df_f.loc[df_f["_idx"] == idx_selecionado, "Fotos"].values[0]
+                if fotos_str:
+                    for b64 in fotos_str.split("|"):
+                        st.image(base64.b64decode(b64))
+            else:
+                st.warning("Nenhum print encontrado com esses filtros.")
         else:
-            st.warning("Nenhum print encontrado com esses filtros.")
+            st.info("Nenhum registro com fotos foi encontrado.")
     else:
-        st.info("Nenhum registro com fotos foi encontrado.")
+        st.info("O histórico está vazio ou ainda não existem registros com fotos.")
 
 with aba_dash:
     st.subheader("📈 Análise de Dados das Academias")
