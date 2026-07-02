@@ -8,7 +8,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 import plotly.express as px
 from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
@@ -27,7 +27,6 @@ def conectar_google():
 
 sheet = conectar_google()
 
-# --- FUNÇÕES AUXILIARES ---
 def foto_para_base64(foto_file):
     img = Image.open(foto_file)
     if img.mode in ("RGBA", "P"): img = img.convert("RGB")
@@ -39,13 +38,38 @@ def foto_para_base64(foto_file):
 def obter_dados_sheet():
     records = sheet.get_all_records()
     df = pd.DataFrame(records)
-    # Adiciona uma coluna de índice para facilitar a edição/exclusão (o gspread começa na linha 1 + header)
     if not df.empty:
         df["_idx"] = df.index + 2 
     return df
 
+def gerar_pdf(df_dados):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+    story = []
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=18, textColor=colors.HexColor('#1E3A8A'))
+    
+    story.append(Paragraph("Relatório de Verificação de Academias", title_style))
+    story.append(Spacer(1, 12))
+    
+    for _, row in df_dados.iterrows():
+        story.append(Paragraph(f"<b>Data:</b> {row['Data']} | <b>Academia:</b> {row['Academia']}", styles['Normal']))
+        story.append(Paragraph(f"<b>Erro:</b> {row['Teve Erro?']}", styles['Normal']))
+        story.append(Paragraph(f"<b>Descrição:</b> {row['Descricao Erro']}", styles['Normal']))
+        story.append(Paragraph(f"<b>Solução:</b> {row['Solucao']}", styles['Normal']))
+        
+        if row['Fotos']:
+            for b64 in row['Fotos'].split("|")[:1]:
+                img_data = base64.b64decode(b64)
+                story.append(RLImage(io.BytesIO(img_data), width=200, height=150))
+        story.append(Spacer(1, 12))
+    
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+
 # --- INTERFACE ---
-st.title("🏋️‍♂️ Verificação de Academias (Google Sheets)")
+st.title("🏋️‍♂️ Verificação de Academias")
 aba_registrar, aba_visualizar, aba_modificar, aba_prints, aba_dash = st.tabs([
     "📝 Registrar", "📊 Histórico", "✏️ Modificar", "🖼️ Ver Prints", "📈 Dashboard"
 ])
@@ -57,8 +81,8 @@ with aba_registrar:
             acad = st.selectbox("Academia", bairros)
             erro = st.radio("Apresentou erro?", ["Não", "Sim"])
         with col2:
-            desc = st.text_area("Descrição")
-            sol = st.text_area("Solução")
+            desc = st.text_area("Descrição", value="Tudo OK")
+            sol = st.text_area("Solução", value="Tudo OK")
         fotos = st.file_uploader("Fotos", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
         if st.form_submit_button("Salvar"):
             fotos_b64 = [foto_para_base64(f) for f in fotos]
@@ -67,30 +91,39 @@ with aba_registrar:
             st.rerun()
 
 with aba_visualizar:
+    st.subheader("🔍 Filtros de Pesquisa")
     df = obter_dados_sheet()
     if not df.empty:
-        st.dataframe(df.drop(columns=["Fotos", "_idx"]), use_container_width=True)
+        c1, c2 = st.columns(2)
+        filtro_acad = c1.selectbox("Filtrar por Academia:", ["Todas"] + list(df["Academia"].unique()))
+        filtro_data = c2.selectbox("Filtrar por Data:", ["Todas"] + list(df["Data"].unique()))
+        
+        df_f = df.copy()
+        if filtro_acad != "Todas": df_f = df_f[df_f["Academia"] == filtro_acad]
+        if filtro_data != "Todas": df_f = df_f[df_f["Data"] == filtro_data]
+        
+        if not df_f.empty:
+            st.download_button("📥 Baixar Relatório PDF", data=gerar_pdf(df_f), file_name="relatorio.pdf", mime="application/pdf")
+            st.dataframe(df_f.drop(columns=["Fotos", "_idx"]), use_container_width=True)
 
 with aba_modificar:
     df = obter_dados_sheet()
     if not df.empty:
         opcoes = df.apply(lambda x: f"{x['Data']} - {x['Academia']}", axis=1)
-        selecao = st.selectbox("Selecione o registro para editar/excluir:", opcoes)
-        idx_selecionado = df.loc[opcoes == selecao, "_idx"].values[0]
-        dados_atuais = df.loc[df["_idx"] == idx_selecionado].iloc[0]
-
-        with st.form("form_edit"):
-            e_acad = st.selectbox("Academia", bairros, index=bairros.index(dados_atuais['Academia']))
-            e_erro = st.radio("Erro?", ["Não", "Sim"], index=0 if dados_atuais['Teve Erro?']=="Não" else 1)
-            e_desc = st.text_area("Descrição", value=dados_atuais['Descricao Erro'])
-            e_sol = st.text_area("Solução", value=dados_atuais['Solucao'])
-            
-            col_b1, col_b2 = st.columns(2)
-            if col_b1.form_submit_button("Salvar Alterações"):
-                sheet.update(f"A{idx_selecionado}:E{idx_selecionado}", [[datetime.now().strftime("%Y-%m-%d"), e_acad, e_erro, e_desc, e_sol]])
+        selecao = st.selectbox("Selecione para editar/excluir:", opcoes)
+        # CONVERSÃO PARA INT PARA EVITAR ERRO DE SERIALIZAÇÃO JSON
+        idx = int(df.loc[opcoes == selecao, "_idx"].values[0])
+        d = df.loc[df["_idx"] == idx].iloc[0]
+        with st.form("edit"):
+            e_a = st.selectbox("Academia", bairros, index=bairros.index(d['Academia']))
+            e_e = st.radio("Erro?", ["Não", "Sim"], index=0 if d['Teve Erro?']=="Não" else 1)
+            e_d = st.text_area("Desc", value=d['Descricao Erro'])
+            e_s = st.text_area("Sol", value=d['Solucao'])
+            if st.form_submit_button("Atualizar"):
+                sheet.update(f"A{idx}:E{idx}", [[datetime.now().strftime("%Y-%m-%d"), e_a, e_e, e_d, e_s]])
                 st.rerun()
-            if col_b2.form_submit_button("🚨 Excluir"):
-                sheet.delete_rows(idx_selecionado)
+            if st.form_submit_button("🚨 Excluir"):
+                sheet.delete_rows(idx)
                 st.rerun()
 
 with aba_prints:
@@ -98,8 +131,7 @@ with aba_prints:
     df_f = df[df["Fotos"] != ""]
     if not df_f.empty:
         reg = st.selectbox("Selecione o registro:", df_f["Data"] + " - " + df_f["Academia"])
-        fotos_str = df_f.loc[df_f["Data"] + " - " + df_f["Academia"] == reg, "Fotos"].values[0]
-        for b64 in fotos_str.split("|"):
+        for b64 in df_f.loc[df_f["Data"] + " - " + df_f["Academia"] == reg, "Fotos"].values[0].split("|"):
             st.image(base64.b64decode(b64))
 
 with aba_dash:
