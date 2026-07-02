@@ -163,13 +163,38 @@ with aba_prints:
                 for b64 in fotos.split("|"): st.image(base64.b64decode(b64))
 
 with aba_dash:
-    st.subheader("📈 Análise de Dados")
+    st.subheader("📈 Análise de Dados das Academias")
     df = obter_dados_sheet()
-    if not df.empty:
-        col1, col2 = st.columns(2)
-        with col1: st.plotly_chart(px.pie(df, names='Academia', hole=0.4), use_container_width=True)
-        with col2:
+    
+    if not df.empty and "Academia" in df.columns:
+        col_grafico1, col_grafico2 = st.columns(2)
+        
+        # 1. Gráfico de Pizza
+        with col_grafico1:
+            st.markdown("### 📊 Participação (%) por Academia")
+            fig_pizza = px.pie(df, names='Academia', hole=0.4)
+            st.plotly_chart(fig_pizza, use_container_width=True)
+            
+        # 2. Gráfico de Barras
+        with col_grafico2:
+            st.markdown("### 🚨 Academias com Mais Erros")
             df_erros = df[df['Teve Erro?'] == 'Sim']
+            
             if not df_erros.empty:
-                st.plotly_chart(px.bar(df_erros['Academia'].value_counts().reset_index(), x='index', y='Academia', color='Academia'), use_container_width=True)
-            else: st.info("Sem erros registrados.")
+                # Geramos o dataframe de contagem de forma explícita para evitar erros de versão
+                contagem = df_erros['Academia'].value_counts().reset_index()
+                contagem.columns = ['Academia', 'Total_Erros'] # Renomeamos para garantir clareza
+                
+                fig_barras = px.bar(
+                    contagem, 
+                    x='Academia', 
+                    y='Total_Erros',
+                    color='Total_Erros',
+                    color_continuous_scale='Reds',
+                    text_auto=True
+                )
+                st.plotly_chart(fig_barras, use_container_width=True)
+            else:
+                st.info("🎉 Parabéns! Nenhum erro foi registrado até o momento.")
+    else:
+        st.info("O sistema ainda não possui dados suficientes para gerar os gráficos.")
