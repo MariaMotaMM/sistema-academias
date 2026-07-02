@@ -26,6 +26,10 @@ sheet = conectar_google()
 
 def foto_para_base64(foto_file):
     img = Image.open(foto_file)
+    # Converte para RGB (remove transparência do PNG) para evitar o erro OSError
+    if img.mode in ("RGBA", "P"):
+        img = img.convert("RGB")
+    
     img.thumbnail((300, 300)) 
     buffered = io.BytesIO()
     img.save(buffered, format="JPEG")
