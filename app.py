@@ -44,10 +44,6 @@ def obter_dados_sheet():
         df["_idx"] = df.index + 2 
     return df
 
-# Exibição de mensagens
-if st.session_state.msg_sucesso:
-    st.success(st.session_state.msg_sucesso)
-    st.session_state.msg_sucesso = None
 
 st.title("🏋️‍♂️ Verificação de Academias")
 
