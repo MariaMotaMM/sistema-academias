@@ -149,7 +149,7 @@ with aba_dash:
                     st.info("Nenhum erro registrado neste período.")
 
             st.divider()
-            st.markdown("### 📉 Participação por Academia (Do menor para o maior)")
+            st.markdown("### 📉 Participação por Academia (Do maior para o menor)")
             df_ordenado = df_final.sort_values(by='Total_Registros', ascending=True)
             max_val = df_ordenado['Total_Registros'].max()
             fig_menor = px.bar(df_ordenado, x='Total_Registros', y='Academia', orientation='h', color='Total_Registros', color_continuous_scale='Blues', range_color=[0, max(1, max_val)], text_auto=True)
