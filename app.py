@@ -53,35 +53,52 @@ def obter_dados_sheet():
 
 def gerar_pdf(df_dados):
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+    # Margens menores para aproveitar melhor o espaço
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
     story = []
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=18, textColor=colors.HexColor('#1E3A8A'))
     
-    story.append(Paragraph("Relatório de Verificação de Academias", title_style))
+    story.append(Paragraph("Relatório de Verificação - Academias", styles['Title']))
     story.append(Spacer(1, 12))
     
-    for _, row in df_dados.iterrows():
-        story.append(Paragraph(f"<b>Data:</b> {row['Data']} | <b>Academia:</b> {row['Academia']}", styles['Normal']))
-        story.append(Paragraph(f"<b>Erro:</b> {row['Teve Erro?']}", styles['Normal']))
-        story.append(Paragraph(f"<b>Descrição:</b> {row['Descricao Erro']}", styles['Normal']))
-        story.append(Paragraph(f"<b>Solução:</b> {row['Solucao']}", styles['Normal']))
-        
-        if row['Fotos']:
-            for b64 in row['Fotos'].split("|")[:1]:
-                img_data = base64.b64decode(b64)
-                story.append(RLImage(io.BytesIO(img_data), width=200, height=150))
-        story.append(Spacer(1, 12))
+    # Criar uma tabela para os dados
+    table_data = [["Data", "Academia", "Erro", "Descrição", "Solução", "Foto"]]
     
+    for _, row in df_dados.iterrows():
+        # Processamento da imagem se existir
+        foto_celula = "-"
+        if row['Fotos'] and isinstance(row['Fotos'], str):
+            try:
+                # Pega apenas a primeira imagem da string base64
+                b64 = row['Fotos'].split("|")[0]
+                img_data = base64.b64decode(b64)
+                # Cria o objeto de imagem para o ReportLab
+                foto_celula = RLImage(io.BytesIO(img_data), width=60, height=40)
+            except:
+                foto_celula = "Erro na imagem"
+        
+        table_data.append([
+            Paragraph(str(row['Data']), styles['Normal']),
+            Paragraph(str(row['Academia']), styles['Normal']),
+            Paragraph(str(row['Teve Erro?']), styles['Normal']),
+            Paragraph(str(row['Descricao Erro']), styles['Normal']),
+            Paragraph(str(row['Solucao']), styles['Normal']),
+            foto_celula
+        ])
+    
+    # Estilização da Tabela
+    t = Table(table_data, colWidths=[60, 80, 40, 150, 150, 70])
+    t.setStyle(TableStyle([
+        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+    ]))
+    
+    story.append(t)
     doc.build(story)
     buffer.seek(0)
     return buffer
-
-# --- INTERFACE ---
-st.title("🏋️‍♂️ Verificação de Academias")
-aba_registrar, aba_visualizar, aba_modificar, aba_prints, aba_dash = st.tabs([
-    "📝 Registrar", "📊 Histórico", "✏️ Modificar", "🖼️ Ver Prints", "📈 Dashboard"
-])
 
 with aba_registrar:
     with st.form("form_reg", clear_on_submit=True):
