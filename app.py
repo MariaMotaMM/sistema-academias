@@ -93,25 +93,48 @@ with aba_visualizar:
         st.info("O histórico está vazio.")
 
 with aba_modificar:
+    st.subheader("✏️ Filtrar para Modificar")
     df = obter_dados_sheet()
+    
     if not df.empty:
-        opcoes = df.apply(lambda x: f"{x['Data']} - {x['Academia']}", axis=1)
-        selecao = st.selectbox("Selecione para editar/excluir:", opcoes)
-        idx = int(df.loc[opcoes == selecao, "_idx"].values[0])
-        d = df.loc[df["_idx"] == idx].iloc[0]
-        with st.form("edit"):
-            e_a = st.selectbox("Academia", bairros, index=bairros.index(d['Academia']))
-            e_e = st.radio("Erro?", ["Não", "Sim"], index=0 if d['Teve Erro?']=="Não" else 1)
-            e_d = st.text_area("Descrição", value=d['Descricao Erro'])
-            e_s = st.text_area("Solução", value=d['Solucao'])
-            if st.form_submit_button("Atualizar"):
-                sheet.update(f"A{idx}:E{idx}", [[obter_data_hoje(), e_a, e_e, e_d, e_s]])
-                st.session_state.msg_sucesso = "Atualizado com sucesso!"
-                st.rerun()
-            if st.form_submit_button("🚨 Excluir"):
-                sheet.delete_rows(idx)
-                st.session_state.msg_sucesso = "Excluído com sucesso!"
-                st.rerun()
+        # 1. Filtros para localizar o registro
+        c1, c2 = st.columns(2)
+        filtro_acad = c1.selectbox("Filtrar Academia:", ["Todas"] + list(df["Academia"].unique()), key="m_acad")
+        filtro_data = c2.selectbox("Filtrar Data:", ["Todas"] + list(df["Data"].unique()), key="m_data")
+        
+        # 2. Aplica o filtro
+        df_f = df.copy()
+        if filtro_acad != "Todas": df_f = df_f[df_f["Academia"] == filtro_acad]
+        if filtro_data != "Todas": df_f = df_f[df_f["Data"] == filtro_data]
+        
+        if not df_f.empty:
+            # 3. Seletor de registros baseados no filtro
+            opcoes = df_f.apply(lambda x: f"{x['Data']} - {x['Academia']} (ID:{x['_idx']})", axis=1)
+            selecao = st.selectbox("Selecione o registro para editar/excluir:", opcoes)
+            
+            # Extrai o ID do registro selecionado
+            idx = int(selecao.split("(ID:")[1].replace(")", ""))
+            d = df.loc[df["_idx"] == idx].iloc[0]
+            
+            with st.form("edit"):
+                e_a = st.selectbox("Academia", bairros, index=bairros.index(d['Academia']))
+                e_e = st.radio("Erro?", ["Não", "Sim"], index=0 if d['Teve Erro?']=="Não" else 1)
+                e_d = st.text_area("Descrição", value=d['Descricao Erro'])
+                e_s = st.text_area("Solução", value=d['Solucao'])
+                
+                if st.form_submit_button("Atualizar"):
+                    sheet.update(f"A{idx}:E{idx}", [[obter_data_hoje(), e_a, e_e, e_d, e_s]])
+                    st.session_state.msg_sucesso = "Atualizado com sucesso!"
+                    st.rerun()
+                    
+                if st.form_submit_button("🚨 Excluir"):
+                    sheet.delete_rows(idx)
+                    st.session_state.msg_sucesso = "Excluído com sucesso!"
+                    st.rerun()
+        else:
+            st.warning("Nenhum registro encontrado com esses filtros.")
+    else:
+        st.info("O histórico está vazio.")
 
 with aba_prints:
     st.subheader("🖼️ Filtros para Visualizar Prints")
