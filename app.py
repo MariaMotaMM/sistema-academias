@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from PIL import Image
 import io
 import base64
@@ -18,6 +18,11 @@ st.set_page_config(page_title="Sistema de Verificação - Academias", layout="wi
 # ID da Planilha
 ID_PLANILHA_GOOGLE = "1JrUGFV8cwRR7niP3y95UMg8Q5nbj9adGjrkvnDzJon4"
 bairros = ['Feira X', 'Fraga Maia', 'Muchila', 'Vila Olimpia', 'Artemia', 'Sobradinho', 'Noide', 'Cidade Nova', 'Adenil', 'Presidente', 'Jardim Europa']
+
+# Função para obter data no fuso de Brasília (UTC-3)
+def obter_data_local():
+    fuso_brasilia = timezone(timedelta(hours=-3))
+    return datetime.now(fuso_brasilia).strftime("%Y-%m-%d")
 
 @st.cache_resource
 def conectar_google():
@@ -86,14 +91,14 @@ with aba_registrar:
         fotos = st.file_uploader("Fotos", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
         if st.form_submit_button("Salvar"):
             fotos_b64 = [foto_para_base64(f) for f in fotos]
-            sheet.append_row([datetime.now().strftime("%Y-%m-%d"), acad, erro, desc, sol, "|".join(fotos_b64)])
+            # USANDO DATA LOCAL
+            sheet.append_row([obter_data_local(), acad, erro, desc, sol, "|".join(fotos_b64)])
             st.success("Salvo com sucesso!")
             st.rerun()
 
 with aba_visualizar:
     st.subheader("🔍 Filtros de Pesquisa")
     df = obter_dados_sheet()
-    
     if not df.empty:
         c1, c2 = st.columns(2)
         filtro_acad = c1.selectbox("Filtrar por Academia:", ["Todas"] + list(df["Academia"].unique()))
@@ -104,24 +109,18 @@ with aba_visualizar:
         if filtro_data != "Todas": df_f = df_f[df_f["Data"] == filtro_data]
         
         if not df_f.empty:
-            # Botão de PDF
             st.download_button("📥 Baixar Relatório PDF", data=gerar_pdf(df_f), file_name="relatorio.pdf", mime="application/pdf")
-            
-            # --- AQUI ESTÁ A MUDANÇA PARA APARECER A DATA ---
             datas_unicas = sorted(df_f["Data"].unique(), reverse=True)
             for data in datas_unicas:
                 st.header(f"📅 {data}")
                 df_dia = df_f[df_f["Data"] == data].drop(columns=["Fotos", "_idx"])
                 st.dataframe(df_dia, use_container_width=True)
-        else:
-            st.warning("Nenhum registro encontrado.")
 
 with aba_modificar:
     df = obter_dados_sheet()
     if not df.empty:
         opcoes = df.apply(lambda x: f"{x['Data']} - {x['Academia']}", axis=1)
         selecao = st.selectbox("Selecione para editar/excluir:", opcoes)
-        # CONVERSÃO PARA INT PARA EVITAR ERRO DE SERIALIZAÇÃO JSON
         idx = int(df.loc[opcoes == selecao, "_idx"].values[0])
         d = df.loc[df["_idx"] == idx].iloc[0]
         with st.form("edit"):
@@ -130,7 +129,8 @@ with aba_modificar:
             e_d = st.text_area("Desc", value=d['Descricao Erro'])
             e_s = st.text_area("Sol", value=d['Solucao'])
             if st.form_submit_button("Atualizar"):
-                sheet.update(f"A{idx}:E{idx}", [[datetime.now().strftime("%Y-%m-%d"), e_a, e_e, e_d, e_s]])
+                # MANTEMOS A DATA ORIGINAL OU ATUALIZAMOS PELA ATUAL? AQUI ATUALIZA PELA ATUAL
+                sheet.update(f"A{idx}:E{idx}", [[obter_data_local(), e_a, e_e, e_d, e_s]])
                 st.rerun()
             if st.form_submit_button("🚨 Excluir"):
                 sheet.delete_rows(idx)
