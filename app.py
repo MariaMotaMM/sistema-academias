@@ -11,7 +11,8 @@ import plotly.express as px
 # Configuração da página
 st.set_page_config(page_title="Sistema de Verificação - Academias", layout="wide")
 
-
+if "aba_ativa" not in st.session_state:
+    st.session_state.aba_ativa = 0
 
 # ID da Planilha
 ID_PLANILHA_GOOGLE = "1JrUGFV8cwRR7niP3y95UMg8Q5nbj9adGjrkvnDzJon4"
@@ -51,9 +52,11 @@ if st.session_state.msg_sucesso:
 st.title("🏋️‍♂️ Verificação de Academias")
 
 # Definindo as abas com controle de estado
-aba_registrar, aba_visualizar, aba_modificar, aba_prints, aba_dash = st.tabs([
-    "📝 Registrar", "📊 Histórico", "✏️ Modificar", "🖼️ Ver Prints", "📈 Dashboard"
-])
+lista_abas = ["📝 Registrar", "📊 Histórico", "✏️ Modificar", "🖼️ Ver Prints", "📈 Dashboard"]
+abas = st.tabs(lista_abas)
+
+# Atribuímos as abas às variáveis
+aba_registrar, aba_visualizar, aba_modificar, aba_prints, aba_dash = abas
 
 # Lógica para garantir que a aba correta abra após o rerun
 # (Note: o Streamlit não permite mudar o active_index dinamicamente de forma trivial, 
@@ -98,24 +101,26 @@ with aba_modificar:
     df = obter_dados_sheet()
     
     if not df.empty and "Academia" in df.columns:
+        # 1. Filtros para localizar o registro
         c1, c2 = st.columns(2)
         filtro_acad = c1.selectbox("Filtrar Academia:", ["Todas"] + list(df["Academia"].unique()), key="m_acad")
         filtro_data = c2.selectbox("Filtrar Data:", ["Todas"] + list(df["Data"].unique()), key="m_data")
         
+        # 2. Aplica filtros no DataFrame
         df_f = df.copy()
         if filtro_acad != "Todas": df_f = df_f[df_f["Academia"] == filtro_acad]
         if filtro_data != "Todas": df_f = df_f[df_f["Data"] == filtro_data]
         
         if not df_f.empty:
-            # ADICIONAMOS KEY PARA O SELECTBOX DE SELEÇÃO
+            # 3. Seletor do registro específico
             opcoes = df_f.apply(lambda x: f"{x['Data']} - {x['Academia']} (ID:{x['_idx']})", axis=1)
             selecao = st.selectbox("Selecione o registro para editar/excluir:", opcoes, key="select_registro_edit")
             
-            # Extração segura do ID
+            # Extração segura do ID da linha
             idx = int(selecao.split("(ID:")[1].replace(")", ""))
             d = df.loc[df["_idx"] == idx].iloc[0]
             
-            # FORMULÁRIO COM KEY ÚNICA
+            # 4. Formulário de Edição
             with st.form("edit_form_final", clear_on_submit=False):
                 e_a = st.selectbox("Academia", bairros, index=bairros.index(d['Academia']))
                 e_e = st.radio("Erro?", ["Não", "Sim"], index=0 if d['Teve Erro?']=="Não" else 1)
@@ -124,18 +129,23 @@ with aba_modificar:
                 
                 c_btn1, c_btn2 = st.columns(2)
                 
+                # Ação: Atualizar
                 if c_btn1.form_submit_button("Atualizar"):
-                    # Atualiza a linha (ajuste o range conforme suas colunas: A até E ou F)
                     sheet.update(f"A{idx}:E{idx}", [[obter_data_hoje(), e_a, e_e, e_d, e_s]])
+                    # Limpa o formulário forçando o rerun
                     st.rerun()
-                    
+                
+                # Ação: Excluir
                 if c_btn2.form_submit_button("🚨 Excluir"):
                     sheet.delete_rows(idx)
+                    # Limpa o formulário forçando o rerun
                     st.rerun()
+            
+            st.info("💡 Após atualizar ou excluir, verifique a aba '📊 Histórico' para confirmar a alteração.")
         else:
             st.warning("Nenhum registro encontrado com esses filtros.")
     else:
-        st.info("O histórico está vazio ou não possui os dados necessários.")
+        st.info("O histórico está vazio ou não possui os dados necessários para modificação.")
 
 with aba_prints:
     st.subheader("🖼️ Filtros para Visualizar Prints")
