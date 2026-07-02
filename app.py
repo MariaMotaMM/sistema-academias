@@ -116,6 +116,38 @@ with aba_prints:
             st.image(base64.b64decode(b64))
 
 with aba_dash:
+    st.subheader("📈 Análise de Dados das Academias")
     df = obter_dados_sheet()
+    
     if not df.empty:
-        st.plotly_chart(px.pie(df, names='Academia', title='Distribuição por Academia'))
+        col_grafico1, col_grafico2 = st.columns(2)
+        
+        # 1. Gráfico de Pizza (Participação Geral)
+        with col_grafico1:
+            st.markdown("### 📊 Participação (%) por Academia")
+            fig_pizza = px.pie(df, names='Academia', hole=0.4)
+            st.plotly_chart(fig_pizza, use_container_width=True)
+            
+        # 2. Gráfico de Barras (Erros)
+        with col_grafico2:
+            st.markdown("### 🚨 Academias com Mais Erros")
+            df_erros = df[df['Teve Erro?'] == 'Sim']
+            
+            if not df_erros.empty:
+                # Conta quantas vezes cada academia aparece na lista de erros
+                contagem_erros = df_erros['Academia'].value_counts().reset_index()
+                contagem_erros.columns = ['Academia', 'Total de Erros']
+                
+                fig_barras = px.bar(
+                    contagem_erros, 
+                    x='Academia', 
+                    y='Total de Erros',
+                    color='Total de Erros',
+                    color_continuous_scale='Reds',
+                    text_auto=True
+                )
+                st.plotly_chart(fig_barras, use_container_width=True)
+            else:
+                st.info("🎉 Parabéns! Nenhum erro foi registrado até o momento.")
+    else:
+        st.info("O sistema ainda não possui dados suficientes para gerar os gráficos.")
