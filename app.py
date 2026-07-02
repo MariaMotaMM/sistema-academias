@@ -93,6 +93,7 @@ with aba_registrar:
 with aba_visualizar:
     st.subheader("🔍 Filtros de Pesquisa")
     df = obter_dados_sheet()
+    
     if not df.empty:
         c1, c2 = st.columns(2)
         filtro_acad = c1.selectbox("Filtrar por Academia:", ["Todas"] + list(df["Academia"].unique()))
@@ -103,8 +104,17 @@ with aba_visualizar:
         if filtro_data != "Todas": df_f = df_f[df_f["Data"] == filtro_data]
         
         if not df_f.empty:
+            # Botão de PDF
             st.download_button("📥 Baixar Relatório PDF", data=gerar_pdf(df_f), file_name="relatorio.pdf", mime="application/pdf")
-            st.dataframe(df_f.drop(columns=["Fotos", "_idx"]), use_container_width=True)
+            
+            # --- AQUI ESTÁ A MUDANÇA PARA APARECER A DATA ---
+            datas_unicas = sorted(df_f["Data"].unique(), reverse=True)
+            for data in datas_unicas:
+                st.header(f"📅 {data}")
+                df_dia = df_f[df_f["Data"] == data].drop(columns=["Fotos", "_idx"])
+                st.dataframe(df_dia, use_container_width=True)
+        else:
+            st.warning("Nenhum registro encontrado.")
 
 with aba_modificar:
     df = obter_dados_sheet()
