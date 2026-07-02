@@ -167,56 +167,59 @@ with aba_dash:
     df = obter_dados_sheet()
     
     if not df.empty and "Academia" in df.columns:
-        # Layout em duas colunas para os gráficos principais
-        col_grafico1, col_grafico2 = st.columns(2)
+        # Filtro de Data Global para a aba Dashboard
+        datas_disponiveis = ["Todas"] + sorted(df["Data"].unique().tolist(), reverse=True)
+        filtro_data_dash = st.selectbox("Filtrar Dashboard por Data:", datas_disponiveis)
         
-        # 1. Gráfico de Pizza
-        with col_grafico1:
-            st.markdown("### 📊 Participação (%) por Academia")
-            fig_pizza = px.pie(df, names='Academia', hole=0.4)
-            st.plotly_chart(fig_pizza, use_container_width=True)
-            
-        # 2. Gráfico de Barras (Mais Erros)
-        with col_grafico2:
-            st.markdown("### 🚨 Academias com Mais Erros")
-            df_erros = df[df['Teve Erro?'] == 'Sim']
-            
-            if not df_erros.empty:
-                contagem = df_erros['Academia'].value_counts().reset_index()
-                contagem.columns = ['Academia', 'Total_Erros']
-                
-                fig_barras = px.bar(
-                    contagem, 
-                    x='Academia', 
-                    y='Total_Erros',
-                    color='Total_Erros',
-                    color_continuous_scale='Reds',
-                    text_auto=True
-                )
-                st.plotly_chart(fig_barras, use_container_width=True)
-            else:
-                st.info("🎉 Parabéns! Nenhum erro registrado.")
+        df_dash = df.copy()
+        if filtro_data_dash != "Todas":
+            df_dash = df_dash[df_dash["Data"] == filtro_data_dash]
 
-        # 3. Gráfico de Menor Participação (Ocupa a largura total)
-        st.divider()
-        st.markdown("### 📉 Academias com Menor Participação")
-        
-        contagem_geral = df['Academia'].value_counts().reset_index()
-        contagem_geral.columns = ['Academia', 'Total_Registros']
-        
-        # Ordena de forma crescente (as menores participações primeiro)
-        contagem_menor = contagem_geral.sort_values(by='Total_Registros', ascending=True)
-        
-        fig_menor = px.bar(
-            contagem_menor, 
-            x='Total_Registros', 
-            y='Academia',
-            orientation='h',
-            color='Total_Registros',
-            color_continuous_scale='Blues_r',
-            text_auto=True
-        )
-        st.plotly_chart(fig_menor, use_container_width=True)
-        
+        if not df_dash.empty:
+            # --- PREPARANDO OS DADOS COM ZEROS ---
+            # Conta as participações reais
+            contagem_real = df_dash['Academia'].value_counts().to_dict()
+            
+            # Cria um dicionário com todas as academias (bairros) iniciadas em zero
+            dados_com_zero = {b: contagem_real.get(b, 0) for b in bairros}
+            df_final = pd.DataFrame(list(dados_com_zero.items()), columns=['Academia', 'Total_Registros'])
+            
+            col_grafico1, col_grafico2 = st.columns(2)
+            
+            # 1. Gráfico de Pizza (Todas as academias, incluindo zero)
+            with col_grafico1:
+                st.markdown("### 📊 Participação (%) por Academia")
+                fig_pizza = px.pie(df_final, names='Academia', values='Total_Registros', hole=0.4)
+                st.plotly_chart(fig_pizza, use_container_width=True)
+                
+            # 2. Gráfico de Barras (Mais Erros - Focado apenas no que tem erro)
+            with col_grafico2:
+                st.markdown("### 🚨 Academias com Mais Erros")
+                df_erros = df_dash[df_dash['Teve Erro?'] == 'Sim']
+                if not df_erros.empty:
+                    contagem = df_erros['Academia'].value_counts().reset_index()
+                    contagem.columns = ['Academia', 'Total_Erros']
+                    fig_barras = px.bar(contagem, x='Academia', y='Total_Erros', color='Total_Erros', color_continuous_scale='Reds', text_auto=True)
+                    st.plotly_chart(fig_barras, use_container_width=True)
+                else:
+                    st.info("Nenhum erro registrado neste período.")
+
+            # 3. Gráfico de Menor Participação (Incluindo Zeros)
+            st.divider()
+            st.markdown("### 📉 Participação por Academia (Do menor para o maior)")
+            df_ordenado = df_final.sort_values(by='Total_Registros', ascending=True)
+            
+            fig_menor = px.bar(
+                df_ordenado, 
+                x='Total_Registros', 
+                y='Academia',
+                orientation='h',
+                color='Total_Registros',
+                color_continuous_scale='Blues_r',
+                text_auto=True
+            )
+            st.plotly_chart(fig_menor, use_container_width=True)
+        else:
+            st.warning("Nenhum dado encontrado para a data selecionada.")
     else:
-        st.info("O sistema ainda não possui dados suficientes para gerar os gráficos.")
+        st.info("O sistema ainda não possui dados suficientes.")
