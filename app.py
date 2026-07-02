@@ -11,11 +11,7 @@ import plotly.express as px
 # Configuração da página
 st.set_page_config(page_title="Sistema de Verificação - Academias", layout="wide")
 
-# Inicialização de Estados
-if "msg_sucesso" not in st.session_state:
-    st.session_state.msg_sucesso = None
-if "aba_ativa" not in st.session_state:
-    st.session_state.aba_ativa = 0
+
 
 # ID da Planilha
 ID_PLANILHA_GOOGLE = "1JrUGFV8cwRR7niP3y95UMg8Q5nbj9adGjrkvnDzJon4"
@@ -131,12 +127,10 @@ with aba_modificar:
                 if c_btn1.form_submit_button("Atualizar"):
                     # Atualiza a linha (ajuste o range conforme suas colunas: A até E ou F)
                     sheet.update(f"A{idx}:E{idx}", [[obter_data_hoje(), e_a, e_e, e_d, e_s]])
-                    st.session_state.msg_sucesso = "✅ Atualizado com sucesso!"
                     st.rerun()
                     
                 if c_btn2.form_submit_button("🚨 Excluir"):
                     sheet.delete_rows(idx)
-                    st.session_state.msg_sucesso = "🗑️ Excluído com sucesso!"
                     st.rerun()
         else:
             st.warning("Nenhum registro encontrado com esses filtros.")
