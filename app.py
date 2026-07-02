@@ -141,6 +141,8 @@ with aba_modificar:
         else:
             st.warning("Nenhum registro encontrado com esses filtros.")
     else:
+        st.info("O histórico está vazio ou não possui os dados necessários para modificação.")
+
 with aba_dash:
     st.subheader("📈 Análise de Dados das Academias")
     df = obter_dados_sheet()
