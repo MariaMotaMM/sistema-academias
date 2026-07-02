@@ -98,7 +98,7 @@ with aba_modificar:
         with st.form("edit"):
             e_a = st.selectbox("Academia", bairros, index=bairros.index(d['Academia']))
             e_e = st.radio("Erro?", ["Não", "Sim"], index=0 if d['Teve Erro?']=="Não" else 1)
-            e_d = st.text_area("Descrição Erro", value=d['Descricao Erro'])
+            e_d = st.text_area("Descrição", value=d['Descricao Erro'])
             e_s = st.text_area("Solução", value=d['Solucao'])
             if st.form_submit_button("Atualizar"):
                 sheet.update(f"A{idx}:E{idx}", [[obter_data_hoje(), e_a, e_e, e_d, e_s]])
