@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, date
 import io
+import base64
 import gspread
 from google.oauth2.service_account import Credentials
 import plotly.express as px
@@ -225,16 +226,24 @@ with aba_prints:
                 reg = st.selectbox("Selecione:", opcoes)
                 idx = int(reg.split("(ID:")[1].replace(")", ""))
                 
+                # Lê os dados da planilha
                 fotos_ids = str(df_f.loc[df_f["_idx"] == idx, "Fotos"].values[0])
                 
                 if fotos_ids and fotos_ids.strip() != "nan" and fotos_ids.strip() != "":
-                    with st.spinner("Baixando imagens em alta qualidade..."):
-                        for file_id in fotos_ids.split("|"):
-                            if file_id.strip():
-                                bytes_img = baixar_drive(file_id)
-                                st.image(bytes_img, use_container_width=True)
+                    with st.spinner("Carregando imagens..."):
+                        for item in fotos_ids.split("|"):
+                            item = item.strip()
+                            if item:
+                                # Verifica o tamanho. Base64 tem milhares de caracteres. IDs do Drive têm ~33.
+                                if len(item) > 100:
+                                    # É uma foto ANTIGA (decodifica o Base64)
+                                    st.image(base64.b64decode(item), width="stretch")
+                                else:
+                                    # É uma foto NOVA (Baixa do Google Drive em alta resolução)
+                                    bytes_img = baixar_drive(item)
+                                    st.image(bytes_img, width="stretch")
                 else:
-                    st.info("Este registro não possui fotos válidas salvas.")
+                    st.info("Este registro não possui fotos anexadas.")
             else:
                 st.warning("Nenhum print encontrado com os filtros selecionados.")
         else:
