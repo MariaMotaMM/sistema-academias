@@ -50,8 +50,11 @@ def obter_dados_sheet():
 
 # --- FUNÇÕES DO DRIVE ---
 def upload_drive(foto_file):
-    """Envia o arquivo para o Drive da Service Account e retorna o ID."""
-    file_metadata = {'name': foto_file.name}
+    """Envia o arquivo para a pasta específica do Drive e retorna o ID."""
+    file_metadata = {
+        'name': foto_file.name,
+        'parents': ['1ecdEEA4hfh1Ip1ihsuZerAG9vqIDlA4R'] # ID da sua pasta Fotos_Academia
+    }
     media = MediaIoBaseUpload(io.BytesIO(foto_file.getvalue()), mimetype=foto_file.type, resumable=True)
     arquivo = drive_service.files().create(body=file_metadata, media_body=media, fields='id').execute()
     return arquivo.get('id')
@@ -236,12 +239,12 @@ with aba_prints:
                             if item:
                                 # Verifica o tamanho. Base64 tem milhares de caracteres. IDs do Drive têm ~33.
                                 if len(item) > 100:
-                                    # É uma foto ANTIGA (decodifica o Base64)
-                                    st.image(base64.b64decode(item), width="stretch")
+                                    # É uma foto ANTIGA (decodifica o Base64 sem esticar)
+                                    st.image(base64.b64decode(item))
                                 else:
-                                    # É uma foto NOVA (Baixa do Google Drive em alta resolução)
+                                    # É uma foto NOVA (Baixa do Google Drive em alta resolução sem esticar)
                                     bytes_img = baixar_drive(item)
-                                    st.image(bytes_img, width="stretch")
+                                    st.image(bytes_img, output_format="PNG")
                 else:
                     st.info("Este registro não possui fotos anexadas.")
             else:
