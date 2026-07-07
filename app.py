@@ -222,33 +222,49 @@ with aba_dash:
             st.warning("Nenhum dado encontrado.")
 
 # ==================== ABA PRINTS ====================
+# ==================== ABA PRINTS ====================
 with aba_prints:
     st.subheader("🖼️ Filtros para Visualizar Prints")
     df = obter_dados_sheet()
+    
     if not df.empty and "Fotos" in df.columns:
+        # Filtra apenas os registros que possuem fotos
         df_f = df[df["Fotos"] != ""]
+        
         if not df_f.empty:
             col1, col2 = st.columns(2)
             f_acad = col1.selectbox("Filtrar Academia:", ["Todas"] + list(df_f["Academia"].unique()), key="p_acad")
             f_data = col2.selectbox("Filtrar Data:", ["Todas"] + list(df_f["Data"].unique()), key="p_data")
+            
             if f_acad != "Todas": df_f = df_f[df_f["Academia"] == f_acad]
             if f_data != "Todas": df_f = df_f[df_f["Data"] == f_data]
             
             if not df_f.empty:
-                opcoes = df_f["Data"] + " - " + df_f["Academia"] + " (ID:" + df_f["_idx"].astype(str) + ")"
-                reg = st.selectbox("Selecione:", opcoes)
-                idx = int(reg.split("(ID:")[1].replace(")", ""))
+                # Cria a lista de opções convertendo explicitamente para lista e adicionando um placeholder
+                lista_opcoes = list(df_f["Data"] + " - " + df_f["Academia"] + " (ID:" + df_f["_idx"].astype(str) + ")")
+                opcoes = ["Selecione um registro..."] + lista_opcoes
                 
-                fotos_ids = str(df_f.loc[df_f["_idx"] == idx, "Fotos"].values[0])
+                reg = st.selectbox("Selecione qual registro deseja visualizar:", opcoes)
                 
-                if fotos_ids and fotos_ids.strip() != "nan" and fotos_ids.strip() != "":
-                    for item in fotos_ids.split("|"):
-                        item = item.strip()
-                        if item and len(item) > 100:
-                            st.image(base64.b64decode(item))
-                else:
-                    st.info("Este registro não possui fotos anexadas.")
+                # Só exibe as imagens se o usuário tiver selecionado algo válido
+                if reg != "Selecione um registro...":
+                    idx = int(reg.split("(ID:")[1].replace(")", ""))
+                    fotos_ids = str(df_f.loc[df_f["_idx"] == idx, "Fotos"].values[0])
+                    
+                    if fotos_ids and fotos_ids.strip() != "nan" and fotos_ids.strip() != "":
+                        st.divider()
+                        st.markdown(f"**Visualizando prints de:** {reg.split(' (ID')[0]}")
+                        
+                        # Exibe as imagens separadas
+                        for item in fotos_ids.split("|"):
+                            item = item.strip()
+                            if item and len(item) > 100:
+                                st.image(base64.b64decode(item), use_container_width=True)
+                    else:
+                        st.info("Este registro não possui fotos anexadas ou ocorreu um erro ao salvá-las.")
             else:
-                st.warning("Nenhum print encontrado.")
+                st.warning("Nenhum print encontrado com os filtros selecionados.")
         else:
-            st.info("Ainda não há registros com fotos salvas.")
+            st.info("Ainda não há registros com fotos salvas no sistema.")
+    else:
+        st.info("O banco de dados está vazio ou a coluna de fotos não existe.")
