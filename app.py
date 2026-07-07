@@ -37,15 +37,27 @@ def obter_dados_sheet():
         df["_idx"] = df.index + 2 
     return df
 
+# --- FUNÇÃO DE FOTO OTIMIZADA E SEGURA ---
 def foto_para_base64_otimizada(foto_file):
+    """
+    Mantém a qualidade de leitura (800px) e reduz o "peso" em texto para caber no Google Sheets.
+    """
     img = Image.open(foto_file)
+    
+    # Converte para RGB se for PNG transparente
     if img.mode in ("RGBA", "P"): 
         img = img.convert("RGB")
+        
+    # Redimensiona mantendo a proporção, com limite de 800px (ótimo para ler textos)
     img.thumbnail((800, 800), Image.Resampling.LANCZOS)
+    
     buffered = io.BytesIO()
+    # Salva com compressão otimizada
     img.save(buffered, format="JPEG", quality=75, optimize=True)
+    
     return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
+# --- INTERFACE ---
 st.title("🏋️‍♂️ Verificação de Academias")
 
 lista_abas = ["📝 Registrar", "📊 Histórico", "✏️ Modificar", "🖼️ Ver Prints", "📈 Dashboard"]
@@ -56,13 +68,14 @@ with aba_registrar:
     with st.form("form_reg", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
-            acad = st.selectbox("Academia", bairros)
-            erro = st.radio("Apresentou erro?", ["Não", "Sim"])
+            acad = st.selectbox("Academia", bairros, key="reg_acad")
+            erro = st.radio("Apresentou erro?", ["Não", "Sim"], key="reg_erro")
         with col2:
-            desc = st.text_area("Descrição", value="Tudo OK")
-            sol = st.text_area("Solução", value="Tudo OK")
+            desc = st.text_area("Descrição", value="Tudo OK", key="reg_desc")
+            sol = st.text_area("Solução", value="Tudo OK", key="reg_sol")
             
-        fotos = st.file_uploader("Fotos", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
+        fotos = st.file_uploader("Fotos", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'], key="reg_fotos")
+        
         botão_salvar = st.form_submit_button("Salvar")
         
     if botão_salvar:
@@ -77,7 +90,11 @@ with aba_registrar:
                 string_fotos = "|".join(fotos_b64)
                 
                 if len(string_fotos) > 50000:
-                    st.error("🚨 Não foi possível salvar as imagens! O tamanho excede o limite (50.000 caracteres).")
+                    st.error(
+                        f"🚨 Não foi possível salvar as imagens! O tamanho acumulado das fotos "
+                        f"({len(string_fotos)} caracteres) excede o limite do Google Sheets (50.000 caracteres). "
+                        "Tente enviar menos fotos por vez ou reduza o tamanho do arquivo original."
+                    )
                 else:
                     try:
                         sheet.append_row([obter_data_hoje(), acad, erro, desc, sol, string_fotos])
@@ -89,26 +106,26 @@ with aba_registrar:
 # ==================== ABA VISUALIZAR ====================
 with aba_visualizar:
     st.subheader("🔍 Filtros de Pesquisa")
-    df_vis = obter_dados_sheet() 
+    df_vis = obter_dados_sheet()
     
     if not df_vis.empty:
         c1, c2 = st.columns(2)
-        filtro_acad = c1.selectbox("Filtrar por Academia:", ["Todas"] + list(df_vis["Academia"].unique()), key="v_acad")
-        filtro_data = c2.selectbox("Filtrar por Data:", ["Todas"] + list(df_vis["Data"].unique()), key="v_data")
+        filtro_acad_v = c1.selectbox("Filtrar por Academia:", ["Todas"] + list(df_vis["Academia"].unique()), key="v_acad")
+        filtro_data_v = c2.selectbox("Filtrar por Data:", ["Todas"] + list(df_vis["Data"].unique()), key="v_data")
         
-        df_f = df_vis.copy()
-        if filtro_acad != "Todas": df_f = df_f[df_f["Academia"] == filtro_acad]
-        if filtro_data != "Todas": df_f = df_f[df_f["Data"] == filtro_data]
+        df_fv = df_vis.copy()
+        if filtro_acad_v != "Todas": df_fv = df_fv[df_fv["Academia"] == filtro_acad_v]
+        if filtro_data_v != "Todas": df_fv = df_fv[df_fv["Data"] == filtro_data_v]
         
         st.divider()
         
-        if not df_f.empty:
-            datas_unicas = sorted(df_f["Data"].unique(), reverse=True)
-            sub_abas = st.tabs([f"📅 {d}" for d in datas_unicas])
+        if not df_fv.empty:
+            datas_unicas = sorted(df_fv["Data"].unique(), reverse=True)
             
-            for aba, data_aba in zip(sub_abas, datas_unicas):
-                with aba:
-                    df_exibicao = df_f[df_f["Data"] == data_aba].drop(columns=["Fotos", "_idx"], errors='ignore')
+            # SOLUÇÃO AQUI: Em vez de st.tabs (que quebra o layout), usamos st.expander
+            for data in datas_unicas:
+                with st.expander(f"📅 Registros do dia: {data}", expanded=True):
+                    df_exibicao = df_fv[df_fv["Data"] == data].drop(columns=["Fotos", "_idx"], errors="ignore")
                     st.dataframe(df_exibicao, use_container_width=True, hide_index=True)
         else:
             st.warning("Nenhum registro encontrado com esses filtros.")
@@ -131,11 +148,10 @@ with aba_modificar:
         
         if not df_fm.empty:
             opcoes_mod = df_fm.apply(lambda x: f"{x['Data']} - {x['Academia']} (ID:{x['_idx']})", axis=1).tolist()
-            # Adicionado placeholder para não carregar automaticamente
-            selecao = st.selectbox("Selecione o registro para editar/excluir:", ["Selecione um registro..."] + opcoes_mod, key="select_registro_edit")
+            selecao_m = st.selectbox("Selecione o registro para editar/excluir:", ["Selecione um registro..."] + opcoes_mod, key="select_registro_edit")
             
-            if selecao != "Selecione um registro...":
-                idx = int(selecao.split("(ID:")[1].replace(")", ""))
+            if selecao_m != "Selecione um registro...":
+                idx = int(selecao_m.split("(ID:")[1].replace(")", ""))
                 d = df_mod.loc[df_mod["_idx"] == idx].iloc[0]
                 
                 with st.form("edit_form_final", clear_on_submit=False):
@@ -148,57 +164,18 @@ with aba_modificar:
                     if c_btn1.form_submit_button("Atualizar"):
                         fotos_atuais = str(d.get('Fotos', ''))
                         sheet.update(f"A{idx}:F{idx}", [[obter_data_hoje(), e_a, e_e, e_d, e_s, fotos_atuais]])
-                        st.success("Atualizado!")
+                        st.success("Atualizado com sucesso!")
                         st.rerun()
                         
                     if c_btn2.form_submit_button("🚨 Excluir"):
                         sheet.delete_rows(idx)
                         st.success("Deletado com sucesso!")
                         st.rerun()
+                st.info("💡 Após atualizar ou excluir, verifique a aba '📊 Histórico'.")
         else:
             st.warning("Nenhum registro encontrado com esses filtros.")
     else:
-        st.info("Sem dados para modificar.")
-
-# ==================== ABA PRINTS ====================
-with aba_prints:
-    st.subheader("🖼️ Filtros para Visualizar Prints")
-    df_pr = obter_dados_sheet()
-    
-    if not df_pr.empty and "Fotos" in df_pr.columns:
-        df_fp = df_pr[df_pr["Fotos"] != ""]
-        if not df_fp.empty:
-            col1, col2 = st.columns(2)
-            f_acad = col1.selectbox("Filtrar Academia:", ["Todas"] + list(df_fp["Academia"].unique()), key="p_acad")
-            f_data = col2.selectbox("Filtrar Data:", ["Todas"] + list(df_fp["Data"].unique()), key="p_data")
-            
-            if f_acad != "Todas": df_fp = df_fp[df_fp["Academia"] == f_acad]
-            if f_data != "Todas": df_fp = df_fp[df_fp["Data"] == f_data]
-            
-            if not df_fp.empty:
-                lista_opcoes_pr = list(df_fp["Data"] + " - " + df_fp["Academia"] + " (ID:" + df_fp["_idx"].astype(str) + ")")
-                opcoes_pr = ["Selecione um registro..."] + lista_opcoes_pr
-                reg = st.selectbox("Selecione qual registro deseja visualizar:", opcoes_pr, key="p_select")
-                
-                if reg != "Selecione um registro...":
-                    idx = int(reg.split("(ID:")[1].replace(")", ""))
-                    fotos_ids = str(df_fp.loc[df_fp["_idx"] == idx, "Fotos"].values[0])
-                    
-                    if fotos_ids and fotos_ids.strip() != "nan" and fotos_ids.strip() != "":
-                        st.divider()
-                        st.markdown(f"**Visualizando prints de:** {reg.split(' (ID')[0]}")
-                        for item in fotos_ids.split("|"):
-                            item = item.strip()
-                            if item and len(item) > 100:
-                                st.image(base64.b64decode(item), use_container_width=True)
-                    else:
-                        st.info("Este registro não possui fotos anexadas.")
-            else:
-                st.warning("Nenhum print encontrado com os filtros selecionados.")
-        else:
-            st.info("Ainda não há registros com fotos salvas.")
-    else:
-        st.info("O banco de dados está vazio ou a coluna de fotos não existe.")
+        st.info("O histórico está vazio ou não possui os dados necessários.")
 
 # ==================== ABA DASHBOARD ====================
 with aba_dash:
@@ -207,7 +184,7 @@ with aba_dash:
     
     if not df_dash_full.empty and "Academia" in df_dash_full.columns:
         datas_disponiveis = ["Todas"] + sorted(df_dash_full["Data"].unique().tolist(), reverse=True)
-        filtro_data_dash = st.selectbox("Filtrar Dashboard por Data:", datas_disponiveis, key="dash_data")
+        filtro_data_dash = st.selectbox("Filtrar Dashboard por Data:", datas_disponiveis, key="d_data")
         
         df_dash = df_dash_full.copy()
         if filtro_data_dash != "Todas":
@@ -240,4 +217,49 @@ with aba_dash:
             fig_menor.update_traces(textfont_color='white')
             st.plotly_chart(fig_menor, use_container_width=True)
         else:
-            st.warning("Nenhum dado encontrado para o período selecionado.")
+            st.warning("Nenhum dado encontrado para os filtros selecionados.")
+    else:
+        st.info("Nenhum dado encontrado no histórico para gerar o Dashboard.")
+
+# ==================== ABA PRINTS ====================
+with aba_prints:
+    st.subheader("🖼️ Filtros para Visualizar Prints")
+    df_pr = obter_dados_sheet()
+    
+    if not df_pr.empty and "Fotos" in df_pr.columns:
+        df_fp = df_pr[df_pr["Fotos"] != ""]
+        
+        if not df_fp.empty:
+            col1, col2 = st.columns(2)
+            f_acad_p = col1.selectbox("Filtrar Academia:", ["Todas"] + list(df_fp["Academia"].unique()), key="p_acad")
+            f_data_p = col2.selectbox("Filtrar Data:", ["Todas"] + list(df_fp["Data"].unique()), key="p_data")
+            
+            if f_acad_p != "Todas": df_fp = df_fp[df_fp["Academia"] == f_acad_p]
+            if f_data_p != "Todas": df_fp = df_fp[df_fp["Data"] == f_data_p]
+            
+            if not df_fp.empty:
+                lista_opcoes = list(df_fp["Data"] + " - " + df_fp["Academia"] + " (ID:" + df_fp["_idx"].astype(str) + ")")
+                opcoes_p = ["Selecione um registro..."] + lista_opcoes
+                
+                reg = st.selectbox("Selecione qual registro deseja visualizar:", opcoes_p, key="p_select")
+                
+                if reg != "Selecione um registro...":
+                    idx = int(reg.split("(ID:")[1].replace(")", ""))
+                    fotos_ids = str(df_fp.loc[df_fp["_idx"] == idx, "Fotos"].values[0])
+                    
+                    if fotos_ids and fotos_ids.strip() != "nan" and fotos_ids.strip() != "":
+                        st.divider()
+                        st.markdown(f"**Visualizando prints de:** {reg.split(' (ID')[0]}")
+                        
+                        for item in fotos_ids.split("|"):
+                            item = item.strip()
+                            if item and len(item) > 100:
+                                st.image(base64.b64decode(item), use_container_width=True)
+                    else:
+                        st.info("Este registro não possui fotos anexadas ou ocorreu um erro ao salvá-las.")
+            else:
+                st.warning("Nenhum print encontrado com os filtros selecionados.")
+        else:
+            st.info("Ainda não há registros com fotos salvas no sistema.")
+    else:
+        st.info("O banco de dados está vazio ou a coluna de fotos não existe.")
