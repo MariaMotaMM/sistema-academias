@@ -39,22 +39,12 @@ def obter_dados_sheet():
 
 # --- FUNÇÃO DE FOTO OTIMIZADA E SEGURA ---
 def foto_para_base64_otimizada(foto_file):
-    """
-    Mantém a qualidade de leitura (800px) e reduz o "peso" em texto para caber no Google Sheets.
-    """
     img = Image.open(foto_file)
-    
-    # Converte para RGB se for PNG transparente
     if img.mode in ("RGBA", "P"): 
         img = img.convert("RGB")
-        
-    # Redimensiona mantendo a proporção, com limite de 800px (ótimo para ler textos)
     img.thumbnail((800, 800), Image.Resampling.LANCZOS)
-    
     buffered = io.BytesIO()
-    # Salva com compressão otimizada
     img.save(buffered, format="JPEG", quality=75, optimize=True)
-    
     return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
 # --- INTERFACE ---
@@ -75,7 +65,6 @@ with aba_registrar:
             sol = st.text_area("Solução", value="Tudo OK", key="reg_sol")
             
         fotos = st.file_uploader("Fotos", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'], key="reg_fotos")
-        
         botão_salvar = st.form_submit_button("Salvar")
         
     if botão_salvar:
@@ -90,11 +79,7 @@ with aba_registrar:
                 string_fotos = "|".join(fotos_b64)
                 
                 if len(string_fotos) > 50000:
-                    st.error(
-                        f"🚨 Não foi possível salvar as imagens! O tamanho acumulado das fotos "
-                        f"({len(string_fotos)} caracteres) excede o limite do Google Sheets (50.000 caracteres). "
-                        "Tente enviar menos fotos por vez ou reduza o tamanho do arquivo original."
-                    )
+                    st.error("🚨 Não foi possível salvar as imagens! O tamanho excede o limite (50.000 caracteres).")
                 else:
                     try:
                         sheet.append_row([obter_data_hoje(), acad, erro, desc, sol, string_fotos])
@@ -121,8 +106,6 @@ with aba_visualizar:
         
         if not df_fv.empty:
             datas_unicas = sorted(df_fv["Data"].unique(), reverse=True)
-            
-            # SOLUÇÃO AQUI: Em vez de st.tabs (que quebra o layout), usamos st.expander
             for data in datas_unicas:
                 with st.expander(f"📅 Registros do dia: {data}", expanded=True):
                     df_exibicao = df_fv[df_fv["Data"] == data].drop(columns=["Fotos", "_idx"], errors="ignore")
