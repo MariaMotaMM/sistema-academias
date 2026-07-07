@@ -75,15 +75,42 @@ def foto_para_base64_otimizada(foto_file):
         
     return b64_string
 
-# --- MENU LATERAL (SUBSTITUINDO AS ABAS DO TOPO) ---
-st.sidebar.title("Navegação")
-menu = st.sidebar.radio(
-    "Escolha a tela:",
-    ["📝 Registrar", "📊 Histórico", "✏️ Modificar", "🖼️ Ver Prints", "📈 Dashboard"]
-)
+# --- MENU LATERAL BONITO (SIDEBAR) ---
+with st.sidebar:
+    # Cabeçalho com Ícone e Nome do App
+    st.markdown("""
+        <div style="text-align: center; padding-bottom: 10px;">
+            <h1 style="margin-bottom: 0px; font-size: 50px;">🏋️‍♂️</h1>
+            <h2 style="margin-top: 0px; color: #1E90FF;">SisVerifica</h2>
+            <p style="color: gray; font-size: 14px; margin-top: -10px;">Gestão de Academias</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.divider() # Linha divisória
+    
+    # Menu de navegação (sem aquele título feio em cima)
+    menu = st.radio(
+        "",
+        ["📝 Registrar", "📊 Histórico", "✏️ Modificar", "🖼️ Ver Prints", "📈 Dashboard"],
+        label_visibility="collapsed"
+    )
+    
+    st.divider() # Linha divisória
+    
+    # Rodapé moderno
+    st.markdown("""
+        <div style="text-align: center;">
+            <p style="color: #A0A0A0; font-size: 12px;">Versão 1.0<br>© 2026</p>
+        </div>
+    """, unsafe_allow_html=True)
 
-# --- INTERFACE ---
-st.title("🏋️‍♂️ Verificação de Academias")
+
+# --- INTERFACE PRINCIPAL ---
+
+if menu != "📝 Registrar":
+    st.title(menu[2:]) # Coloca como título o nome da aba escolhida (tirando o emoji pro título não ficar duplo)
+else:
+    st.title("🏋️‍♂️ Verificação de Academias")
 
 if menu == "📝 Registrar":
     with st.form("form_reg", clear_on_submit=True):
