@@ -41,7 +41,7 @@ def obter_dados_sheet():
             df["_idx"] = df.index + 2 
         return df
     except Exception as e:
-        st.error("⚠️ O Google Sheets está processando os dados. Tente novamente em alguns segundos.")
+        # Se o Google der erro de API, retorna vazio silenciosamente
         return pd.DataFrame()
 
 # --- FUNÇÃO DE FOTO OTIMIZADA PARA TEXTOS E PRINTS ---
