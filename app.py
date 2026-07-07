@@ -21,7 +21,6 @@ bairros = ['Feira X', 'Fraga Maia', 'Muchila', 'Vila Olimpia', 'Artemia', 'Sobra
 @st.cache_resource
 def conectar_google():
     creds_dict = st.secrets["google_credentials"]
-    # Apenas escopo do Sheets, sem Google Drive
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     return gspread.authorize(creds).open_by_key(ID_PLANILHA_GOOGLE).sheet1
@@ -46,18 +45,14 @@ def foto_para_base64_otimizada(foto_file):
     """
     img = Image.open(foto_file)
     
-    # Remove transparências se houver
     if img.mode in ("RGBA", "P"): 
         img = img.convert("RGB")
         
-    # Deixa a imagem com 1000 pixels (tamanho ótimo para leitura na tela)
     try:
         img.thumbnail((1000, 1000), Image.Resampling.LANCZOS)
     except AttributeError:
         img.thumbnail((1000, 1000), Image.ANTIALIAS)
         
-    # O TRUQUE: Reduz de milhões de cores para apenas 32 cores.
-    # Isso tira todo o "peso" do arquivo, mas mantém as letras 100% nítidas.
     img = img.convert("P", palette=Image.ADAPTIVE, colors=32)
     
     buffered = io.BytesIO()
@@ -65,9 +60,7 @@ def foto_para_base64_otimizada(foto_file):
     
     b64_string = base64.b64encode(buffered.getvalue()).decode('utf-8')
     
-    # Trava de segurança: Se a foto tentar passar do limite de 50 mil caracteres do Sheets
     if len(b64_string) > 49000:
-        # Reduz sutilmente um pouco mais as cores para garantir que salve
         img = img.convert("P", palette=Image.ADAPTIVE, colors=16)
         buffered = io.BytesIO()
         img.save(buffered, format="PNG", optimize=True)
@@ -102,22 +95,28 @@ with aba_registrar:
             st.rerun()
 
 with aba_visualizar:
-    st.subheader("🔍 Filtros de Pesquisa")
+    st.subheader("🔍 Histórico Organizado por Academia")
     df = obter_dados_sheet()
     if not df.empty:
-        c1, c2 = st.columns(2)
-        filtro_acad = c1.selectbox("Filtrar por Academia:", ["Todas"] + list(df["Academia"].unique()))
-        filtro_data = c2.selectbox("Filtrar por Data:", ["Todas"] + list(df["Data"].unique()))
-        df_f = df.copy()
-        if filtro_acad != "Todas": df_f = df_f[df_f["Academia"] == filtro_acad]
-        if filtro_data != "Todas": df_f = df_f[df_f["Data"] == filtro_data]
-        st.divider()
-        if not df_f.empty:
-            for data in sorted(df_f["Data"].unique(), reverse=True):
-                st.header(f"📅 {data}")
-                st.dataframe(df_f[df_f["Data"] == data].drop(columns=["Fotos", "_idx"]), use_container_width=True)
-        else:
-            st.warning("Nenhum registro encontrado com esses filtros.")
+        # Cria as pastas/abas para cada academia dinamicamente
+        academias_ativas = sorted(df["Academia"].unique())
+        abas_historico = st.tabs(["📊 Visão Geral"] + academias_ativas)
+        
+        # Pasta 1: Visão Geral (Tudo)
+        with abas_historico[0]:
+            st.markdown("### Todos os Registros")
+            st.dataframe(df.drop(columns=["Fotos", "_idx"], errors='ignore'), use_container_width=True)
+            
+        # Pastas seguintes: Uma para cada academia
+        for i, acad in enumerate(academias_ativas, start=1):
+            with abas_historico[i]:
+                st.markdown(f"### 📂 Histórico Exclusivo - {acad}")
+                df_acad = df[df["Academia"] == acad]
+                
+                # Exibe a tabela filtrada daquela academia
+                st.dataframe(df_acad.drop(columns=["Fotos", "_idx"], errors='ignore'), use_container_width=True)
+    else:
+        st.info("Ainda não há registros.")
 
 with aba_modificar:
     st.subheader("✏️ Filtrar para Modificar")
@@ -138,9 +137,9 @@ with aba_modificar:
             
             with st.form("edit_form_final", clear_on_submit=False):
                 e_a = st.selectbox("Academia", bairros, index=bairros.index(d['Academia']))
-                e_e = st.radio("Erro?", ["Não", "Sim"], index=0 if d['Teve Erro?']=="Não" else 1)
-                e_d = st.text_area("Descrição", value=d['Descricao Erro'])
-                e_s = st.text_area("Solução", value=d['Solucao'])
+                e_e = st.radio("Erro?", ["Não", "Sim"], index=0 if d.get('Teve Erro?', 'Não')=="Não" else 1)
+                e_d = st.text_area("Descrição", value=d.get('Descricao Erro', ''))
+                e_s = st.text_area("Solução", value=d.get('Solucao', ''))
                 
                 c_btn1, c_btn2 = st.columns(2)
                 if c_btn1.form_submit_button("Atualizar"):
@@ -153,12 +152,10 @@ with aba_modificar:
                     sheet.delete_rows(idx)
                     st.success("Deletado com sucesso!")
                     st.rerun()
-                    
-            st.info("💡 Após atualizar ou excluir, verifique a aba '📊 Histórico'.")
         else:
             st.warning("Nenhum registro encontrado com esses filtros.")
     else:
-        st.info("O histórico está vazio ou não possui os dados necessários.")
+        st.info("O histórico está vazio.")
 
 with aba_dash:
     st.subheader("📈 Análise de Dados das Academias")
@@ -181,7 +178,7 @@ with aba_dash:
                 st.plotly_chart(px.pie(df_final, names='Academia', values='Total_Registros', hole=0.4), use_container_width=True)
             with col_grafico2:
                 st.markdown("### 🚨 Mais Erros")
-                df_erros = df_dash[df_dash['Teve Erro?'] == 'Sim']
+                df_erros = df_dash[df_dash.get('Teve Erro?', 'Não') == 'Sim']
                 if not df_erros.empty:
                     contagem = df_erros['Academia'].value_counts().reset_index()
                     contagem.columns = ['Academia', 'Total_Erros']
@@ -200,37 +197,47 @@ with aba_dash:
             st.warning("Nenhum dado encontrado.")
 
 with aba_prints:
-    st.subheader("🖼️ Filtros para Visualizar Prints")
+    st.subheader("🖼️ Galeria de Prints por Academia")
     df = obter_dados_sheet()
     if not df.empty and "Fotos" in df.columns:
         df_f = df[df["Fotos"] != ""]
         if not df_f.empty:
-            col1, col2 = st.columns(2)
-            f_acad = col1.selectbox("Filtrar Academia:", ["Todas"] + list(df_f["Academia"].unique()), key="p_acad")
-            f_data = col2.selectbox("Filtrar Data:", ["Todas"] + list(df_f["Data"].unique()), key="p_data")
-            if f_acad != "Todas": df_f = df_f[df_f["Academia"] == f_acad]
-            if f_data != "Todas": df_f = df_f[df_f["Data"] == f_data]
+            # Cria abas na parte superior para organizar cada academia
+            academias_com_foto = sorted(df_f["Academia"].unique())
+            abas_academias = st.tabs(academias_com_foto)
             
-            if not df_f.empty:
-                opcoes = df_f["Data"] + " - " + df_f["Academia"] + " (ID:" + df_f["_idx"].astype(str) + ")"
-                reg = st.selectbox("Selecione:", opcoes)
-                idx = int(reg.split("(ID:")[1].replace(")", ""))
-                
-                fotos_ids = str(df_f.loc[df_f["_idx"] == idx, "Fotos"].values[0])
-                
-                if fotos_ids and fotos_ids.strip() != "nan" and fotos_ids.strip() != "":
-                    for item in fotos_ids.split("|"):
-                        item = item.strip()
-                        if item:
-                            try:
-                                img_bytes = base64.b64decode(item)
-                                # Exibe no tamanho original nítido, em vez de esticar para o tamanho do monitor
-                                st.image(img_bytes, output_format="PNG")
-                            except Exception:
-                                st.error("⚠️ Esta foto foi corrompida. Tente gerar um registro novo.")
-                else:
-                    st.info("Este registro não possui fotos anexadas.")
-            else:
-                st.warning("Nenhum print encontrado.")
+            for i, acad in enumerate(academias_com_foto):
+                with abas_academias[i]:
+                    st.markdown(f"### 📁 Arquivos da Academia: {acad}")
+                    df_acad = df_f[df_f["Academia"] == acad]
+                    
+                    # Filtro de data individual dentro da pasta de cada academia
+                    datas = ["Todas as Datas"] + list(df_acad["Data"].unique())
+                    f_data = st.selectbox(f"Filtrar Data:", datas, key=f"dp_{acad}")
+                    
+                    if f_data != "Todas as Datas":
+                        df_acad = df_acad[df_acad["Data"] == f_data]
+                        
+                    # Cria uma pasta expansível para cada registro
+                    for idx_row, row in df_acad.iterrows():
+                        status = '🔴 Com Erro' if row.get('Teve Erro?', 'Não') == 'Sim' else '🟢 OK'
+                        
+                        # Isso cria a caixinha que abre e fecha!
+                        with st.expander(f"📅 Dia {row['Data']} | {status}"):
+                            st.write(f"**Descrição do que ocorreu:** {row.get('Descricao Erro', 'Sem detalhes')}")
+                            
+                            fotos_ids = str(row["Fotos"])
+                            if fotos_ids and fotos_ids.strip() != "nan":
+                                for item in fotos_ids.split("|"):
+                                    item = item.strip()
+                                    if item:
+                                        try:
+                                            # Exibe o print em tamanho real (nítido)
+                                            img_bytes = base64.b64decode(item)
+                                            st.image(img_bytes, output_format="PNG")
+                                        except Exception:
+                                            st.error("⚠️ Esta foto foi corrompida. Tente gerar um registro novo.")
         else:
             st.info("Ainda não há registros com fotos salvas.")
+    else:
+        st.info("A planilha ainda está vazia.")
