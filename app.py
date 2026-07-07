@@ -21,6 +21,7 @@ bairros = ['Feira X', 'Fraga Maia', 'Muchila', 'Vila Olimpia', 'Artemia', 'Sobra
 @st.cache_resource
 def conectar_google():
     creds_dict = st.secrets["google_credentials"]
+    # Apenas escopo do Sheets, sem Google Drive
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     return gspread.authorize(creds).open_by_key(ID_PLANILHA_GOOGLE).sheet1
@@ -30,7 +31,6 @@ sheet = conectar_google()
 def obter_data_hoje():
     return date.today().strftime("%Y-%m-%d")
 
-# --- O TRUQUE DO CACHE AQUI ---
 # Guarda os dados na memória para não travar a API do Google
 @st.cache_data
 def obter_dados_sheet():
@@ -41,7 +41,6 @@ def obter_dados_sheet():
             df["_idx"] = df.index + 2 
         return df
     except Exception as e:
-        # Se o Google der erro de API, não quebra o app, apenas retorna vazio
         st.error("⚠️ O Google Sheets está processando os dados. Tente novamente em alguns segundos.")
         return pd.DataFrame()
 
@@ -122,7 +121,7 @@ if menu == "📝 Registrar":
                 fotos_b64 = [foto_para_base64_otimizada(f) for f in fotos]
                 sheet.append_row([obter_data_hoje(), acad, erro, desc, sol, "|".join(fotos_b64)])
             st.success("Registro salvo com sucesso!")
-            st.cache_data.clear() # Limpa a memória para baixar a planilha atualizada
+            st.cache_data.clear() 
             st.rerun()
 
 elif menu == "📊 Histórico":
@@ -141,7 +140,9 @@ elif menu == "📊 Histórico":
                 st.header(f"📅 {data}")
                 st.dataframe(df_f[df_f["Data"] == data].drop(columns=["Fotos", "_idx"]), use_container_width=True)
         else:
-            st.warning("Nenhum registro encontrado com esses filtros.")
+            st.warning("Nenhum requisito realizado.")
+    else:
+        st.info("Nenhum requisito realizado.")
 
 elif menu == "✏️ Modificar":
     st.subheader("✏️ Filtrar para Modificar")
@@ -171,20 +172,20 @@ elif menu == "✏️ Modificar":
                     fotos_atuais = str(d.get('Fotos', ''))
                     sheet.update(f"A{idx}:F{idx}", [[obter_data_hoje(), e_a, e_e, e_d, e_s, fotos_atuais]])
                     st.success("Atualizado!")
-                    st.cache_data.clear() # Limpa a memória para exibir o dado novo
+                    st.cache_data.clear() 
                     st.rerun()
                     
                 if c_btn2.form_submit_button("🚨 Excluir"):
                     sheet.delete_rows(idx)
                     st.success("Deletado com sucesso!")
-                    st.cache_data.clear() # Limpa a memória
+                    st.cache_data.clear() 
                     st.rerun()
                     
             st.info("💡 Após atualizar ou excluir, verifique a aba '📊 Histórico'.")
         else:
-            st.warning("Nenhum registro encontrado com esses filtros.")
+            st.warning("Nenhum requisito realizado.")
     else:
-        st.info("O histórico está vazio ou não possui os dados necessários.")
+        st.info("Nenhum requisito realizado.")
 
 elif menu == "📈 Dashboard":
     st.subheader("📈 Análise de Dados das Academias")
@@ -223,7 +224,9 @@ elif menu == "📈 Dashboard":
             fig_menor.update_traces(textfont_color='white')
             st.plotly_chart(fig_menor, use_container_width=True)
         else:
-            st.warning("Nenhum dado encontrado.")
+            st.warning("Nenhum requisito realizado.")
+    else:
+        st.info("Nenhum requisito realizado.")
 
 elif menu == "🖼️ Ver Prints":
     st.subheader("🖼️ Filtros para Visualizar Prints")
@@ -254,8 +257,10 @@ elif menu == "🖼️ Ver Prints":
                             except Exception:
                                 st.error("⚠️ Esta foto foi corrompida. Tente gerar um registro novo.")
                 else:
-                    st.info("Este registro não possui fotos anexadas.")
+                    st.info("Nenhum requisito realizado.")
             else:
-                st.warning("Nenhum print encontrado.")
+                st.warning("Nenhum requisito realizado.")
         else:
-            st.info("Ainda não há registros com fotos salvas.")
+            st.info("Nenhum requisito realizado.")
+    else:
+        st.info("Nenhum requisito realizado.")
