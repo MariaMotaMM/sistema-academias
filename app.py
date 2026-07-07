@@ -76,12 +76,36 @@ with aba_registrar:
             
         fotos = st.file_uploader("Fotos", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
         
-        if st.form_submit_button("Salvar"):
-            with st.spinner("Otimizando e salvando com segurança..."):
-                fotos_b64 = [foto_para_base64_otimizada(f) for f in fotos]
-                sheet.append_row([obter_data_hoje(), acad, erro, desc, sol, "|".join(fotos_b64)])
+        # O botão DEVE estar dentro do bloco 'with st.form'
+        botão_salvar = st.form_submit_button("Salvar")
+        
+    # A lógica de processamento pode ficar fora do formulário para evitar bugs visuais
+    if botão_salvar:
+        if not fotos:
+            # Caso não tenha fotos, envia uma string vazia
+            with st.spinner("Salvando registro..."):
+                sheet.append_row([obter_data_hoje(), acad, erro, desc, sol, ""])
             st.success("Registro salvo com sucesso!")
             st.rerun()
+        else:
+            with st.spinner("Otimizando e verificando tamanho das fotos..."):
+                fotos_b64 = [foto_para_base64_otimizada(f) for f in fotos]
+                string_fotos = "|".join(fotos_b64)
+                
+                # Validação do limite do Google Sheets (50.000 caracteres)
+                if len(string_fotos) > 50000:
+                    st.error(
+                        f"🚨 Não foi possível salvar as imagens! O tamanho acumulado das fotos "
+                        f"({len(string_fotos)} caracteres) excede o limite do Google Sheets (50.000 caracteres). "
+                        "Tente enviar menos fotos por vez ou reduza o tamanho do arquivo original."
+                    )
+                else:
+                    try:
+                        sheet.append_row([obter_data_hoje(), acad, erro, desc, sol, string_fotos])
+                        st.success("Registro salvo com sucesso!")
+                        st.rerun()
+                    except gspread.exceptions.APIError as e:
+                        st.error(f"Erro na API do Google Sheets: {e}")
 
 with aba_visualizar:
     st.subheader("🔍 Filtros de Pesquisa")
