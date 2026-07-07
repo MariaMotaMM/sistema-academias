@@ -105,21 +105,37 @@ with aba_registrar:
                         st.error(f"Erro na API do Google Sheets: {e}")
 
 # ==================== ABA VISUALIZAR ====================
+# ==================== ABA VISUALIZAR ====================
 with aba_visualizar:
     st.subheader("🔍 Filtros de Pesquisa")
     df = obter_dados_sheet()
+    
     if not df.empty:
         c1, c2 = st.columns(2)
-        filtro_acad = c1.selectbox("Filtrar por Academia:", ["Todas"] + list(df["Academia"].unique()))
-        filtro_data = c2.selectbox("Filtrar por Data:", ["Todas"] + list(df["Data"].unique()))
+        
+        # Adicionado key="v_acad" e key="v_data" para isolar estes filtros das outras abas
+        filtro_acad = c1.selectbox("Filtrar por Academia:", ["Todas"] + list(df["Academia"].unique()), key="v_acad")
+        filtro_data = c2.selectbox("Filtrar por Data:", ["Todas"] + list(df["Data"].unique()), key="v_data")
+        
         df_f = df.copy()
         if filtro_acad != "Todas": df_f = df_f[df_f["Academia"] == filtro_acad]
         if filtro_data != "Todas": df_f = df_f[df_f["Data"] == filtro_data]
+        
         st.divider()
+        
         if not df_f.empty:
-            for data in sorted(df_f["Data"].unique(), reverse=True):
-                st.header(f"📅 {data}")
-                st.dataframe(df_f[df_f["Data"] == data].drop(columns=["Fotos", "_idx"]), use_container_width=True)
+            # 1. Pegamos todas as datas únicas (já ordenadas da mais recente para a mais antiga)
+            datas_unicas = sorted(df_f["Data"].unique(), reverse=True)
+            
+            # 2. Criamos as sub-abas dinamicamente
+            sub_abas = st.tabs([f"📅 {data}" for data in datas_unicas])
+            
+            # 3. Distribuímos os dados dentro de cada sub-aba correspondente
+            for aba, data in zip(sub_abas, datas_unicas):
+                with aba:
+                    df_exibicao = df_f[df_f["Data"] == data].drop(columns=["Fotos", "_idx"])
+                    # hide_index=True deixa a tabela mais limpa e profissional
+                    st.dataframe(df_exibicao, use_container_width=True, hide_index=True)
         else:
             st.warning("Nenhum registro encontrado com esses filtros.")
 
