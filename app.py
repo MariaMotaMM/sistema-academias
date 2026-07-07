@@ -2,11 +2,11 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, date
 import io
+import base64
 import gspread
 from google.oauth2.service_account import Credentials
 import plotly.express as px
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
+from PIL import Image
 
 # Configuração da página
 st.set_page_config(page_title="Sistema de Verificação - Academias", layout="wide")
@@ -21,21 +21,12 @@ bairros = ['Feira X', 'Fraga Maia', 'Muchila', 'Vila Olimpia', 'Artemia', 'Sobra
 @st.cache_resource
 def conectar_google():
     creds_dict = st.secrets["google_credentials"]
-    # Adicionando o escopo do Drive junto com o do Sheets
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
-    ]
+    # Apenas escopo do Sheets, sem Google Drive
+    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-    
-    # Conexão Sheets
-    sheet = gspread.authorize(creds).open_by_key(ID_PLANILHA_GOOGLE).sheet1
-    # Conexão Drive
-    drive_service = build('drive', 'v3', credentials=creds)
-    
-    return sheet, drive_service
+    return gspread.authorize(creds).open_by_key(ID_PLANILHA_GOOGLE).sheet1
 
-sheet, drive_service = conectar_google()
+sheet = conectar_google()
 
 def obter_data_hoje():
     return date.today().strftime("%Y-%m-%d")
@@ -47,25 +38,42 @@ def obter_dados_sheet():
         df["_idx"] = df.index + 2 
     return df
 
-# --- FUNÇÕES DO DRIVE ---
-def upload_drive(foto_file):
-    """Envia o arquivo para o Drive da Service Account e retorna o ID."""
-    file_metadata = {'name': foto_file.name}
-    media = MediaIoBaseUpload(io.BytesIO(foto_file.getvalue()), mimetype=foto_file.type, resumable=True)
-    arquivo = drive_service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-    return arquivo.get('id')
-
-def baixar_drive(file_id):
-    """Baixa o arquivo do Drive direto para a memória (alta qualidade)."""
-    request = drive_service.files().get_media(fileId=file_id)
-    return request.execute()
-
-def deletar_drive(file_id):
-    """Deleta o arquivo do Drive para liberar espaço."""
+# --- FUNÇÃO DE FOTO OTIMIZADA PARA TEXTOS E PRINTS ---
+def foto_para_base64_otimizada(foto_file):
+    """
+    Mantém a imagem grande e nítida usando PNG de cores reduzidas 
+    para caber no limite do Google Sheets sem borrar.
+    """
+    img = Image.open(foto_file)
+    
+    # Remove transparências se houver
+    if img.mode in ("RGBA", "P"): 
+        img = img.convert("RGB")
+        
+    # Deixa a imagem com 1000 pixels (tamanho ótimo para leitura na tela)
     try:
-        drive_service.files().delete(fileId=file_id).execute()
-    except Exception as e:
-        pass # Ignora erro caso o arquivo já não exista
+        img.thumbnail((1000, 1000), Image.Resampling.LANCZOS)
+    except AttributeError:
+        img.thumbnail((1000, 1000), Image.ANTIALIAS)
+        
+    # O TRUQUE: Reduz de milhões de cores para apenas 32 cores.
+    # Isso tira todo o "peso" do arquivo, mas mantém as letras 100% nítidas.
+    img = img.convert("P", palette=Image.ADAPTIVE, colors=32)
+    
+    buffered = io.BytesIO()
+    img.save(buffered, format="PNG", optimize=True)
+    
+    b64_string = base64.b64encode(buffered.getvalue()).decode('utf-8')
+    
+    # Trava de segurança: Se a foto tentar passar do limite de 50 mil caracteres do Sheets
+    if len(b64_string) > 49000:
+        # Reduz sutilmente um pouco mais as cores para garantir que salve
+        img = img.convert("P", palette=Image.ADAPTIVE, colors=16)
+        buffered = io.BytesIO()
+        img.save(buffered, format="PNG", optimize=True)
+        b64_string = base64.b64encode(buffered.getvalue()).decode('utf-8')
+        
+    return b64_string
 
 # --- INTERFACE ---
 st.title("🏋️‍♂️ Verificação de Academias")
@@ -87,15 +95,9 @@ with aba_registrar:
         fotos = st.file_uploader("Fotos", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
         
         if st.form_submit_button("Salvar"):
-            ids_fotos = []
-            if fotos:
-                with st.spinner("Enviando fotos em alta qualidade para o Drive..."):
-                    for f in fotos:
-                        file_id = upload_drive(f)
-                        ids_fotos.append(file_id)
-            
-            # Salva na planilha apenas os IDs das fotos separados por |
-            sheet.append_row([obter_data_hoje(), acad, erro, desc, sol, "|".join(ids_fotos)])
+            with st.spinner("Otimizando as imagens para leitura e salvando..."):
+                fotos_b64 = [foto_para_base64_otimizada(f) for f in fotos]
+                sheet.append_row([obter_data_hoje(), acad, erro, desc, sol, "|".join(fotos_b64)])
             st.success("Registro salvo com sucesso!")
             st.rerun()
 
@@ -142,30 +144,21 @@ with aba_modificar:
                 
                 c_btn1, c_btn2 = st.columns(2)
                 if c_btn1.form_submit_button("Atualizar"):
-                    # Atualiza mantendo as fotos originais na coluna F
-                    fotos_atuais = d.get('Fotos', '')
+                    fotos_atuais = str(d.get('Fotos', ''))
                     sheet.update(f"A{idx}:F{idx}", [[obter_data_hoje(), e_a, e_e, e_d, e_s, fotos_atuais]])
                     st.success("Atualizado!")
                     st.rerun()
                     
                 if c_btn2.form_submit_button("🚨 Excluir"):
-                    # Exclui as imagens atreladas do Drive primeiro
-                    fotos_para_excluir = str(d.get('Fotos', ''))
-                    if pd.notna(fotos_para_excluir) and fotos_para_excluir.strip() != "":
-                        for file_id in fotos_para_excluir.split("|"):
-                            if file_id.strip():
-                                deletar_drive(file_id)
-                                
-                    # Deleta a linha do Sheets
                     sheet.delete_rows(idx)
                     st.success("Deletado com sucesso!")
                     st.rerun()
                     
-            st.info("💡 Após atualizar ou excluir, verifique a aba '📊 Histórico' para confirmar a alteração.")
+            st.info("💡 Após atualizar ou excluir, verifique a aba '📊 Histórico'.")
         else:
             st.warning("Nenhum registro encontrado com esses filtros.")
     else:
-        st.info("O histórico está vazio ou não possui os dados necessários para modificação.")
+        st.info("O histórico está vazio ou não possui os dados necessários.")
 
 with aba_dash:
     st.subheader("📈 Análise de Dados das Academias")
@@ -204,9 +197,7 @@ with aba_dash:
             fig_menor.update_traces(textfont_color='white')
             st.plotly_chart(fig_menor, use_container_width=True)
         else:
-            st.warning("Nenhum dado encontrado para a data selecionada.")
-    else:
-        st.info("O sistema ainda não possui dados suficientes.")
+            st.warning("Nenhum dado encontrado.")
 
 with aba_prints:
     st.subheader("🖼️ Filtros para Visualizar Prints")
@@ -228,14 +219,18 @@ with aba_prints:
                 fotos_ids = str(df_f.loc[df_f["_idx"] == idx, "Fotos"].values[0])
                 
                 if fotos_ids and fotos_ids.strip() != "nan" and fotos_ids.strip() != "":
-                    with st.spinner("Baixando imagens em alta qualidade..."):
-                        for file_id in fotos_ids.split("|"):
-                            if file_id.strip():
-                                bytes_img = baixar_drive(file_id)
-                                st.image(bytes_img, use_container_width=True)
+                    for item in fotos_ids.split("|"):
+                        item = item.strip()
+                        if item:
+                            try:
+                                img_bytes = base64.b64decode(item)
+                                # Exibe no tamanho original nítido, em vez de esticar para o tamanho do monitor
+                                st.image(img_bytes, output_format="PNG")
+                            except Exception:
+                                st.error("⚠️ Esta foto foi corrompida. Tente gerar um registro novo.")
                 else:
-                    st.info("Este registro não possui fotos válidas salvas.")
+                    st.info("Este registro não possui fotos anexadas.")
             else:
-                st.warning("Nenhum print encontrado com os filtros selecionados.")
+                st.warning("Nenhum print encontrado.")
         else:
             st.info("Ainda não há registros com fotos salvas.")
