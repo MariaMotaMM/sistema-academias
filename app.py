@@ -64,6 +64,7 @@ lista_abas = ["📝 Registrar", "📊 Histórico", "✏️ Modificar", "🖼️ 
 abas = st.tabs(lista_abas)
 aba_registrar, aba_visualizar, aba_modificar, aba_prints, aba_dash = abas
 
+# ==================== ABA REGISTRAR ====================
 with aba_registrar:
     with st.form("form_reg", clear_on_submit=True):
         col1, col2 = st.columns(2)
@@ -76,13 +77,10 @@ with aba_registrar:
             
         fotos = st.file_uploader("Fotos", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
         
-        # O botão DEVE estar dentro do bloco 'with st.form'
         botão_salvar = st.form_submit_button("Salvar")
         
-    # A lógica de processamento pode ficar fora do formulário para evitar bugs visuais
     if botão_salvar:
         if not fotos:
-            # Caso não tenha fotos, envia uma string vazia
             with st.spinner("Salvando registro..."):
                 sheet.append_row([obter_data_hoje(), acad, erro, desc, sol, ""])
             st.success("Registro salvo com sucesso!")
@@ -92,7 +90,6 @@ with aba_registrar:
                 fotos_b64 = [foto_para_base64_otimizada(f) for f in fotos]
                 string_fotos = "|".join(fotos_b64)
                 
-                # Validação do limite do Google Sheets (50.000 caracteres)
                 if len(string_fotos) > 50000:
                     st.error(
                         f"🚨 Não foi possível salvar as imagens! O tamanho acumulado das fotos "
@@ -107,6 +104,7 @@ with aba_registrar:
                     except gspread.exceptions.APIError as e:
                         st.error(f"Erro na API do Google Sheets: {e}")
 
+# ==================== ABA VISUALIZAR ====================
 with aba_visualizar:
     st.subheader("🔍 Filtros de Pesquisa")
     df = obter_dados_sheet()
@@ -125,6 +123,7 @@ with aba_visualizar:
         else:
             st.warning("Nenhum registro encontrado com esses filtros.")
 
+# ==================== ABA MODIFICAR ====================
 with aba_modificar:
     st.subheader("✏️ Filtrar para Modificar")
     df = obter_dados_sheet()
@@ -166,6 +165,7 @@ with aba_modificar:
     else:
         st.info("O histórico está vazio ou não possui os dados necessários.")
 
+# ==================== ABA DASHBOARD ====================
 with aba_dash:
     st.subheader("📈 Análise de Dados das Academias")
     df = obter_dados_sheet()
@@ -205,6 +205,7 @@ with aba_dash:
         else:
             st.warning("Nenhum dado encontrado.")
 
+# ==================== ABA PRINTS ====================
 with aba_prints:
     st.subheader("🖼️ Filtros para Visualizar Prints")
     df = obter_dados_sheet()
@@ -228,7 +229,6 @@ with aba_prints:
                     for item in fotos_ids.split("|"):
                         item = item.strip()
                         if item and len(item) > 100:
-                            # Removido o width="stretch" para a imagem não esticar e não perder qualidade
                             st.image(base64.b64decode(item))
                 else:
                     st.info("Este registro não possui fotos anexadas.")
