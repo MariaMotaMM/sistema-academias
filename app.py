@@ -21,7 +21,6 @@ bairros = ['Feira X', 'Fraga Maia', 'Muchila', 'Vila Olimpia', 'Artemia', 'Sobra
 @st.cache_resource
 def conectar_google():
     creds_dict = st.secrets["google_credentials"]
-    # Apenas escopo do Sheets, sem Google Drive
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     return gspread.authorize(creds).open_by_key(ID_PLANILHA_GOOGLE).sheet1
@@ -31,33 +30,33 @@ sheet = conectar_google()
 def obter_data_hoje():
     return date.today().strftime("%Y-%m-%d")
 
+# --- O TRUQUE DO CACHE AQUI ---
+# Guarda os dados na memória para não travar a API do Google
+@st.cache_data
 def obter_dados_sheet():
-    records = sheet.get_all_records()
-    df = pd.DataFrame(records)
-    if not df.empty:
-        df["_idx"] = df.index + 2 
-    return df
+    try:
+        records = sheet.get_all_records()
+        df = pd.DataFrame(records)
+        if not df.empty:
+            df["_idx"] = df.index + 2 
+        return df
+    except Exception as e:
+        # Se o Google der erro de API, não quebra o app, apenas retorna vazio
+        st.error("⚠️ O Google Sheets está processando os dados. Tente novamente em alguns segundos.")
+        return pd.DataFrame()
 
 # --- FUNÇÃO DE FOTO OTIMIZADA PARA TEXTOS E PRINTS ---
 def foto_para_base64_otimizada(foto_file):
-    """
-    Mantém a imagem grande e nítida usando PNG de cores reduzidas 
-    para caber no limite do Google Sheets sem borrar.
-    """
     img = Image.open(foto_file)
     
-    # Remove transparências se houver
     if img.mode in ("RGBA", "P"): 
         img = img.convert("RGB")
         
-    # Deixa a imagem com 1000 pixels (tamanho ótimo para leitura na tela)
     try:
         img.thumbnail((1000, 1000), Image.Resampling.LANCZOS)
     except AttributeError:
         img.thumbnail((1000, 1000), Image.ANTIALIAS)
         
-    # O TRUQUE: Reduz de milhões de cores para apenas 32 cores.
-    # Isso tira todo o "peso" do arquivo, mas mantém as letras 100% nítidas.
     img = img.convert("P", palette=Image.ADAPTIVE, colors=32)
     
     buffered = io.BytesIO()
@@ -65,9 +64,7 @@ def foto_para_base64_otimizada(foto_file):
     
     b64_string = base64.b64encode(buffered.getvalue()).decode('utf-8')
     
-    # Trava de segurança: Se a foto tentar passar do limite de 50 mil caracteres do Sheets
     if len(b64_string) > 49000:
-        # Reduz sutilmente um pouco mais as cores para garantir que salve
         img = img.convert("P", palette=Image.ADAPTIVE, colors=16)
         buffered = io.BytesIO()
         img.save(buffered, format="PNG", optimize=True)
@@ -77,7 +74,6 @@ def foto_para_base64_otimizada(foto_file):
 
 # --- MENU LATERAL BONITO (SIDEBAR) ---
 with st.sidebar:
-    # Cabeçalho com Ícone e Nome do App
     st.markdown("""
         <div style="text-align: center; padding-bottom: 10px;">
             <h1 style="margin-bottom: 0px; font-size: 50px;">🏋️‍♂️</h1>
@@ -86,29 +82,26 @@ with st.sidebar:
         </div>
     """, unsafe_allow_html=True)
     
-    st.divider() # Linha divisória
+    st.divider()
     
-    # Menu de navegação (sem aquele título feio em cima)
     menu = st.radio(
         "",
         ["📝 Registrar", "📊 Histórico", "✏️ Modificar", "🖼️ Ver Prints", "📈 Dashboard"],
         label_visibility="collapsed"
     )
     
-    st.divider() # Linha divisória
+    st.divider()
     
-    # Rodapé moderno
     st.markdown("""
         <div style="text-align: center;">
             <p style="color: #A0A0A0; font-size: 12px;">Versão 1.0<br>© 2026</p>
         </div>
     """, unsafe_allow_html=True)
 
-
 # --- INTERFACE PRINCIPAL ---
 
 if menu != "📝 Registrar":
-    st.title(menu[2:]) # Coloca como título o nome da aba escolhida (tirando o emoji pro título não ficar duplo)
+    st.title(menu[2:]) 
 else:
     st.title("🏋️‍♂️ Verificação de Academias")
 
@@ -129,6 +122,7 @@ if menu == "📝 Registrar":
                 fotos_b64 = [foto_para_base64_otimizada(f) for f in fotos]
                 sheet.append_row([obter_data_hoje(), acad, erro, desc, sol, "|".join(fotos_b64)])
             st.success("Registro salvo com sucesso!")
+            st.cache_data.clear() # Limpa a memória para baixar a planilha atualizada
             st.rerun()
 
 elif menu == "📊 Histórico":
@@ -177,11 +171,13 @@ elif menu == "✏️ Modificar":
                     fotos_atuais = str(d.get('Fotos', ''))
                     sheet.update(f"A{idx}:F{idx}", [[obter_data_hoje(), e_a, e_e, e_d, e_s, fotos_atuais]])
                     st.success("Atualizado!")
+                    st.cache_data.clear() # Limpa a memória para exibir o dado novo
                     st.rerun()
                     
                 if c_btn2.form_submit_button("🚨 Excluir"):
                     sheet.delete_rows(idx)
                     st.success("Deletado com sucesso!")
+                    st.cache_data.clear() # Limpa a memória
                     st.rerun()
                     
             st.info("💡 Após atualizar ou excluir, verifique a aba '📊 Histórico'.")
@@ -254,7 +250,6 @@ elif menu == "🖼️ Ver Prints":
                         if item:
                             try:
                                 img_bytes = base64.b64decode(item)
-                                # Exibe no tamanho original nítido, em vez de esticar para o tamanho do monitor
                                 st.image(img_bytes, output_format="PNG")
                             except Exception:
                                 st.error("⚠️ Esta foto foi corrompida. Tente gerar um registro novo.")
