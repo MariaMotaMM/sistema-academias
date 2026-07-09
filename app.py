@@ -50,11 +50,32 @@ def obter_dados_sheet():
     except Exception as e:
         return pd.DataFrame()
 
-# --- FUNÇÃO DE FOTO COM MÁXIMA QUALIDADE (SEM PERDA) ---
+# --- FUNÇÃO DE FOTO OTIMIZADA COM ALTA QUALIDADE COMPATÍVEL COM GOOGLE SHEETS ---
 def foto_para_base64_maxima_qualidade(foto_file):
-    # Lê os bytes originais diretamente sem redimensionar ou reduzir cores
-    bytes_foto = foto_file.read()
-    b64_string = base64.b64encode(bytes_foto).decode('utf-8')
+    # Abre a imagem usando a biblioteca PIL
+    img = Image.open(foto_file)
+    
+    # Se a imagem tiver transparência (RGBA/PNG), converte para RGB para permitir salvar em JPEG
+    if img.mode in ("RGBA", "P"): 
+        img = img.convert("RGB")
+    
+    # Reduz suavemente resoluções gigantescas para o limite excelente de telas (1200px)
+    img.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
+    
+    # Salva em memória usando formato JPEG de alta fidelidade (85%) com otimizador de peso
+    buffered = io.BytesIO()
+    img.save(buffered, format="JPEG", quality=85, optimize=True)
+    
+    b64_string = base64.b64encode(buffered.getvalue()).decode('utf-8')
+    
+    # SALVAGUARDA ANTI-ERRO: Garante que o texto fique abaixo do limite estrito de 50k do Sheets
+    qualidade = 80
+    while len(b64_string) > 49000 and qualidade > 30:
+        buffered = io.BytesIO()
+        img.save(buffered, format="JPEG", quality=qualidade, optimize=True)
+        b64_string = base64.b64encode(buffered.getvalue()).decode('utf-8')
+        qualidade -= 10 # Vai diminuindo o peso da compressão até caber na célula
+        
     return b64_string
 
 # --- MENU LATERAL BONITO (SIDEBAR) ---
@@ -104,7 +125,7 @@ if menu == "📝 Registrar":
         
         if st.form_submit_button("Salvar"):
             with st.spinner("Processando e salvando fotos em colunas dedicadas..."):
-                # Converte cada foto individualmente em alta qualidade
+                # Converte cada foto individualmente aplicando a compressão inteligente
                 list_fotos_b64 = [foto_para_base64_maxima_qualidade(f) for f in fotos]
                 
                 # Monta a linha base
@@ -134,7 +155,7 @@ elif menu == "📊 Histórico":
         if not df_f.empty:
             for data in sorted(df_f["Data"].unique(), reverse=True):
                 st.header(f"📅 {data}")
-                # Remove colunas que comecem com texto oculto ou colunas extras de fotos dinâmicas no dataframe visível
+                # Remove colunas extras de fotos dinâmicas no dataframe visível do histórico
                 colunas_excluir = [c for c in df_f.columns if c not in ["Data", "Academia", "Teve Erro?", "Descricao Erro", "Solucao", "_idx"]]
                 st.dataframe(df_f[df_f["Data"] == data].drop(columns=colunas_excluir + ["_idx"], errors="ignore"), use_container_width=True)
         else:
