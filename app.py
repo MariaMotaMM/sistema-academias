@@ -35,40 +35,26 @@ def obter_data_hoje():
 @st.cache_data
 def obter_dados_sheet():
     try:
-        records = sheet.get_all_records()
-        df = pd.DataFrame(records)
+        # Pega todas as linhas da planilha de forma bruta para lidar com colunas dinâmicas de fotos
+        rows = sheet.get_all_values()
+        if not rows:
+            return pd.DataFrame()
+        
+        headers = rows[0]
+        data = rows[1:]
+        
+        df = pd.DataFrame(data, columns=headers)
         if not df.empty:
             df["_idx"] = df.index + 2 
         return df
     except Exception as e:
-        # Se o Google der erro de API, retorna vazio silenciosamente
         return pd.DataFrame()
 
-# --- FUNÇÃO DE FOTO OTIMIZADA PARA TEXTOS E PRINTS ---
-def foto_para_base64_otimizada(foto_file):
-    img = Image.open(foto_file)
-    
-    if img.mode in ("RGBA", "P"): 
-        img = img.convert("RGB")
-        
-    try:
-        img.thumbnail((1000, 1000), Image.Resampling.LANCZOS)
-    except AttributeError:
-        img.thumbnail((1000, 1000), Image.ANTIALIAS)
-        
-    img = img.convert("P", palette=Image.ADAPTIVE, colors=32)
-    
-    buffered = io.BytesIO()
-    img.save(buffered, format="PNG", optimize=True)
-    
-    b64_string = base64.b64encode(buffered.getvalue()).decode('utf-8')
-    
-    if len(b64_string) > 49000:
-        img = img.convert("P", palette=Image.ADAPTIVE, colors=16)
-        buffered = io.BytesIO()
-        img.save(buffered, format="PNG", optimize=True)
-        b64_string = base64.b64encode(buffered.getvalue()).decode('utf-8')
-        
+# --- FUNÇÃO DE FOTO COM MÁXIMA QUALIDADE (SEM PERDA) ---
+def foto_para_base64_maxima_qualidade(foto_file):
+    # Lê os bytes originais diretamente sem redimensionar ou reduzir cores
+    bytes_foto = foto_file.read()
+    b64_string = base64.b64encode(bytes_foto).decode('utf-8')
     return b64_string
 
 # --- MENU LATERAL BONITO (SIDEBAR) ---
@@ -114,12 +100,22 @@ if menu == "📝 Registrar":
             desc = st.text_area("Descrição", value="Tudo OK")
             sol = st.text_area("Solução", value="Tudo OK")
             
-        fotos = st.file_uploader("Fotos", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
+        fotos = st.file_uploader("Fotos (Máxima Qualidade)", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
         
         if st.form_submit_button("Salvar"):
-            with st.spinner("Otimizando as imagens para leitura e salvando..."):
-                fotos_b64 = [foto_para_base64_otimizada(f) for f in fotos]
-                sheet.append_row([obter_data_hoje(), acad, erro, desc, sol, "|".join(fotos_b64)])
+            with st.spinner("Processando e salvando fotos em colunas dedicadas..."):
+                # Converte cada foto individualmente em alta qualidade
+                list_fotos_b64 = [foto_para_base64_maxima_qualidade(f) for f in fotos]
+                
+                # Monta a linha base
+                linha_dados = [obter_data_hoje(), acad, erro, desc, sol]
+                
+                # Combina dados + fotos (cada foto será uma coluna subsequente: Foto1, Foto2...)
+                linha_final = linha_dados + list_fotos_b64
+                
+                # Envia tudo para o Sheets de uma vez só travado na mesma linha
+                sheet.append_row(linha_final)
+                
             st.success("Registro salvo com sucesso!")
             st.cache_data.clear() 
             st.rerun()
@@ -138,7 +134,9 @@ elif menu == "📊 Histórico":
         if not df_f.empty:
             for data in sorted(df_f["Data"].unique(), reverse=True):
                 st.header(f"📅 {data}")
-                st.dataframe(df_f[df_f["Data"] == data].drop(columns=["Fotos", "_idx"]), use_container_width=True)
+                # Remove colunas que comecem com texto oculto ou colunas extras de fotos dinâmicas no dataframe visível
+                colunas_excluir = [c for c in df_f.columns if c not in ["Data", "Academia", "Teve Erro?", "Descricao Erro", "Solucao", "_idx"]]
+                st.dataframe(df_f[df_f["Data"] == data].drop(columns=colunas_excluir + ["_idx"], errors="ignore"), use_container_width=True)
         else:
             st.warning("Nenhum requisito realizado.")
     else:
@@ -169,8 +167,14 @@ elif menu == "✏️ Modificar":
                 
                 c_btn1, c_btn2 = st.columns(2)
                 if c_btn1.form_submit_button("Atualizar"):
-                    fotos_atuais = str(d.get('Fotos', ''))
-                    sheet.update(f"A{idx}:F{idx}", [[obter_data_hoje(), e_a, e_e, e_d, e_s, fotos_atuais]])
+                    # Mapeia dinamicamente e preserva as fotos existentes nas colunas da frente
+                    colunas_fixas = ["Data", "Academia", "Teve Erro?", "Descricao Erro", "Solucao", "_idx"]
+                    fotos_atuais = [d[c] for c in df.columns if c not in colunas_fixas and str(d[c]).strip() != ""]
+                    
+                    linha_atualizada = [obter_data_hoje(), e_a, e_e, e_d, e_s] + fotos_atuais
+                    
+                    # Atualiza a linha mantendo o alinhamento das colunas
+                    sheet.update(f"A{idx}", [linha_atualizada])
                     st.success("Atualizado!")
                     st.cache_data.clear() 
                     st.rerun()
@@ -231,8 +235,18 @@ elif menu == "📈 Dashboard":
 elif menu == "🖼️ Ver Prints":
     st.subheader("🖼️ Filtros para Visualizar Prints")
     df = obter_dados_sheet()
-    if not df.empty and "Fotos" in df.columns:
-        df_f = df[df["Fotos"] != ""]
+    
+    if not df.empty and "Academia" in df.columns:
+        # Identifica dinamicamente colunas extras de fotos (Colunas após a 5ª posição padrão)
+        colunas_fixas = ["Data", "Academia", "Teve Erro?", "Descricao Erro", "Solucao", "_idx"]
+        colunas_fotos = [c for c in df.columns if c not in colunas_fixas]
+        
+        # Filtra registros que possuem pelo menos uma foto preenchida em alguma das colunas extras
+        if colunas_fotos:
+            df_f = df[df[colunas_fotos].notna().any(axis=1) & (df[colunas_fotos] != "").any(axis=1)]
+        else:
+            df_f = pd.DataFrame()
+            
         if not df_f.empty:
             col1, col2 = st.columns(2)
             f_acad = col1.selectbox("Filtrar Academia:", ["Todas"] + list(df_f["Academia"].unique()), key="p_acad")
@@ -242,25 +256,29 @@ elif menu == "🖼️ Ver Prints":
             
             if not df_f.empty:
                 opcoes = df_f["Data"] + " - " + df_f["Academia"] + " (ID:" + df_f["_idx"].astype(str) + ")"
-                reg = st.selectbox("Selecione:", opcoes)
+                reg = st.selectbox("Selecione o registro para ver as fotos:", opcoes)
                 idx = int(reg.split("(ID:")[1].replace(")", ""))
                 
-                fotos_ids = str(df_f.loc[df_f["_idx"] == idx, "Fotos"].values[0])
+                # Coleta todas as fotos nas colunas daquela linha do ID selecionado
+                linha_selecionada = df_f[df_f["_idx"] == idx].iloc[0]
+                fotos_encontradas = [linha_selecionada[col] for col in colunas_fotos if str(linha_selecionada[col]).strip() != ""]
                 
-                if fotos_ids and fotos_ids.strip() != "nan" and fotos_ids.strip() != "":
-                    for item in fotos_ids.split("|"):
-                        item = item.strip()
-                        if item:
+                if fotos_encontradas:
+                    st.write(f"📸 Encontrada(s) **{len(fotos_encontradas)}** foto(s) para este registro:")
+                    col_fotos_render = st.columns(min(len(fotos_encontradas), 2)) # Renderiza lado a lado
+                    
+                    for idx_f, item in enumerate(fotos_encontradas):
+                        with col_fotos_render[idx_f % 2]:
                             try:
                                 img_bytes = base64.b64decode(item)
-                                st.image(img_bytes, output_format="PNG")
+                                st.image(img_bytes, caption=f"Foto {idx_f + 1}", use_container_width=True)
                             except Exception:
-                                st.error("⚠️ Esta foto foi corrompida. Tente gerar um registro novo.")
+                                st.error(f"⚠️ A Foto {idx_f + 1} possui um formato inválido ou está corrompida.")
                 else:
-                    st.info("Nenhum requisito realizado.")
+                    st.info("Nenhuma imagem vinculada a este registro específico.")
             else:
-                st.warning("Nenhum requisito realizado.")
+                st.warning("Nenhum print encontrado para os filtros selecionados.")
         else:
-            st.info("Nenhum requisito realizado.")
+            st.info("Nenhum registro com imagens anexadas foi encontrado.")
     else:
-        st.info("Nenhum requisito realizado.")
+        st.info("Nenhum registro encontrado na planilha.")
